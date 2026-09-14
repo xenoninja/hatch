@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"text/tabwriter"
 	"time"
 )
 
@@ -17,6 +18,7 @@ const help = `Hatch manages experimental projects.
 Usage:
   hatch new <name>   Create an active experimental project
   hatch info <name>  Show persisted project information
+  hatch list         List name, creation date, and status, newest first
   hatch help        Show this help
 
 Names: lowercase ASCII letters or digits separated by single hyphens.
@@ -26,7 +28,10 @@ Config: $XDG_CONFIG_HOME/hatch/config.toml (default ~/.config/hatch/config.toml)
 Registry: $XDG_DATA_HOME/hatch/hatch.db (default ~/.local/share/hatch/hatch.db).
 Empty or relative XDG homes use defaults. Missing config uses defaults;
 invalid config is an error. Changes affect new projects only; no files move.
-Storage is created lazily; help and fresh info do not initialize it.
+List uses recorded creation order (latest first, including same-date ties).
+Unavailable locations produce warnings; records and statuses are preserved.
+An empty list succeeds with "No experimental projects tracked.".
+Storage is created lazily; help and fresh info/list do not initialize it.
 `
 
 func main() {
@@ -41,16 +46,20 @@ func execute(args []string) error {
 		fmt.Print(help)
 		return nil
 	}
-	if len(args) == 2 && (args[0] == "new" || args[0] == "info") && (args[1] == "--help" || args[1] == "-h") {
+	if len(args) == 2 && (args[0] == "new" || args[0] == "info" || args[0] == "list") && (args[1] == "--help" || args[1] == "-h") {
 		fmt.Print(help)
 		return nil
 	}
-	if len(args) != 2 || (args[0] != "new" && args[0] != "info") {
-		return fmt.Errorf("expected new <name> or info <name>; use hatch --help")
+	listing := len(args) == 1 && args[0] == "list"
+	if !listing && (len(args) != 2 || (args[0] != "new" && args[0] != "info")) {
+		return fmt.Errorf("expected new <name>, info <name>, or list; use hatch --help")
 	}
-	name := args[1]
-	if !validName.MatchString(name) {
-		return fmt.Errorf("invalid name %q: use lowercase ASCII letters or digits separated by single hyphens", name)
+	var name string
+	if !listing {
+		name = args[1]
+		if !validName.MatchString(name) {
+			return fmt.Errorf("invalid name %q: use lowercase ASCII letters or digits separated by single hyphens", name)
+		}
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -70,11 +79,21 @@ func execute(args []string) error {
 		return err
 	}
 	if store == nil {
+		if listing {
+			return printList(nil)
+		}
 		return fmt.Errorf("unknown experimental project %q", name)
 	}
 	defer store.close()
 	if err := store.reconcile(); err != nil {
 		return err
+	}
+	if listing {
+		projects, err := store.list()
+		if err != nil {
+			return err
+		}
+		return printList(projects)
 	}
 	var p project
 	if args[0] == "new" {
@@ -86,8 +105,31 @@ func execute(args []string) error {
 		return err
 	}
 	fmt.Printf("Name: %s\nCreated: %s\nStatus: %s\nLocation: %s\n", p.Name, p.Date, p.Status, p.Location)
+	warnLocation(p)
+	return nil
+}
+
+func printList(projects []project) error {
+	if len(projects) == 0 {
+		_, err := fmt.Fprintln(os.Stdout, "No experimental projects tracked.")
+		return err
+	}
+	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "NAME\tCREATED\tSTATUS")
+	for _, p := range projects {
+		fmt.Fprintf(w, "%s\t%s\t%s\n", p.Name, p.Date, p.Status)
+	}
+	if err := w.Flush(); err != nil {
+		return err
+	}
+	for _, p := range projects {
+		warnLocation(p)
+	}
+	return nil
+}
+
+func warnLocation(p project) {
 	if info, err := os.Stat(p.Location); err != nil || !info.IsDir() {
 		fmt.Fprintf(os.Stderr, "warning: project location unavailable or not a directory: %s\n", p.Location)
 	}
-	return nil
 }

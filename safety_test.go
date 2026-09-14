@@ -11,11 +11,14 @@ import (
 func TestFreshInspectionAndHelp(t *testing.T) {
 	home := t.TempDir()
 	contains(t, run(t, home, false, nil, "info", "unknown"), "unknown experimental project")
-	for _, args := range [][]string{{"--help"}, {"new", "--help"}, {"info", "-h"}, {"help"}} {
-		contains(t, run(t, home, true, nil, args...), "new <name>", "info <name>")
+	for _, args := range [][]string{{"--help"}, {"new", "--help"}, {"info", "-h"}, {"list", "--help"}, {"list", "-h"}, {"help"}} {
+		contains(t, run(t, home, true, nil, args...), "new <name>", "info <name>", "hatch list")
 	}
 	run(t, home, false, nil, "new")
-	run(t, home, false, nil, "list")
+	run(t, home, true, nil, "list")
+	for _, args := range [][]string{{"list", "extra"}, {"list", "--json"}, {"list", "--help", "extra"}} {
+		run(t, home, false, nil, args...)
+	}
 	entries, err := os.ReadDir(home)
 	if err != nil || len(entries) != 0 {
 		t.Fatalf("inspection initialized home: %v %v", entries, err)
@@ -183,6 +186,7 @@ func TestRecoveryRejectsChangedLocation(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			contains(t, run(t, home, false, nil, "list"), "uncertain", location)
 			contains(t, run(t, home, false, nil, "new", "blocked"), "uncertain", location, "mutations blocked")
 			if change != "intent-collision" {
 				if _, err := os.Stat(location + "-saved"); err != nil {

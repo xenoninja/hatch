@@ -92,6 +92,25 @@ func (s *store) info(name string) (project, error) {
 	return p, err
 }
 
+func (s *store) list() ([]project, error) {
+	// The unique sequence is a total creation order, including same-date
+	// creations and clock changes; no date-based tie breaker is needed.
+	rows, err := s.db.Query(`SELECT name,created_date,status,location FROM projects ORDER BY sequence DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var projects []project
+	for rows.Next() {
+		var p project
+		if err := rows.Scan(&p.Name, &p.Date, &p.Status, &p.Location); err != nil {
+			return nil, err
+		}
+		projects = append(projects, p)
+	}
+	return projects, rows.Err()
+}
+
 // Sync readable ancestors, including existing ones: an earlier invocation
 // may have stopped between mkdir and syncing its parent. Before creating
 // anything, require the nearest existing ancestor to be syncable. Thus Hatch
