@@ -1,6 +1,6 @@
 # Hatch
 
-A standalone Go CLI for creating, listing, and inspecting experimental projects on macOS and Linux.
+A standalone Go CLI for creating, listing, inspecting, and classifying experimental projects on macOS and Linux.
 
 ## Build and use
 
@@ -10,6 +10,8 @@ Requires Go 1.24 or newer to build; the resulting binary needs no Go runtime or 
 go build -o hatch .
 ./hatch new project-alpha
 ./hatch info project-alpha
+./hatch status project-alpha completed
+./hatch status --help
 ./hatch list
 ./hatch list --help
 ./hatch --help
@@ -32,7 +34,20 @@ project-alpha  2026-09-14  active
 
 Rows use recorded creation order, newest first—not alphabetical or calendar-date order. For creations on the same date, the later registry sequence comes first; the unique sequence makes ordering deterministic even if the clock changes. No folders are scanned or imported, and no records are filtered by status or location availability. Missing or non-directory locations produce warnings on stderr with their stored paths; records and lifecycle statuses are unchanged. An absent or empty registry prints `No experimental projects tracked.` and exits successfully without initializing storage. Existing pending operations still undergo the shared recovery rules below.
 
-This release implements `new`, `info`, and `list`. Status changes, promotion, and removal are intentionally deferred.
+## Lifecycle status
+
+`hatch status <name> <status>` reclassifies an existing experimental project and prints its persisted information:
+
+- `active`: ongoing exploration; the initial status.
+- `completed`: experimental work is finished and retained in place.
+- `abandoned`: work has been set aside.
+- `promoted`: relocated outside the experiments directory through promotion; terminal and still tracked. Only promotion may set this status. Promoted projects cannot be reclassified, including to promoted again.
+
+Switch freely among active, completed, and abandoned. Repeating the current non-promoted status succeeds. Status changes update only the registry, preserving identity, immutable creation date, current location, creation order, and all files. Missing or non-directory locations warn without preventing reclassification or introducing another status. Unknown names, invalid statuses, and direct assignment of promoted fail with nonzero errors.
+
+Status changes use the shared mutation lock, pending-recovery guard, and a SQLite transaction. An interruption before commit leaves the previous status; after commit the new status persists. No filesystem move or pending status operation is needed.
+
+This release implements `new`, `info`, `list`, and `status`. Promotion and removal are intentionally deferred.
 
 ## Configuration and storage
 
@@ -59,7 +74,7 @@ On a subsequent invocation:
 - Intent with no destination is cleared; creation can be retried.
 - A durably identified, unchanged directory completes registration with the original date.
 - A committed project remains tracked, even if its files later disappear.
-- An existing destination without recorded ownership, a changed directory identity, or a missing previously identified directory is uncertain. Hatch preserves files and pending evidence, reports the path, and blocks operations requiring recovery. This includes `info` and `list`; help remains available.
+- An existing destination without recorded ownership, a changed directory identity, or a missing previously identified directory is uncertain. Hatch preserves files and pending evidence, reports the path, and blocks operations requiring recovery. This includes `info`, `list`, and `status`; help remains available.
 
 In particular, interruption between making the directory and recording its identity deliberately requires manual investigation—even if the directory is empty. Hatch never guesses ownership or deletes files during recovery. There is no automatic repair command in this release. Preserve the reported path and the registry before investigating; deleting the registry or pending evidence is not a safe generic repair.
 
@@ -73,5 +88,7 @@ go test ./...
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /tmp/hatch-linux .
 CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o /tmp/hatch-macos .
 ```
+
+Status tests cover the complete non-promoted transition matrix, errors, preserved metadata/files/list order, changed configuration, unavailable locations, pending recovery, concurrent updates, and interruptions before/after commit. Until promotion lands, a narrow lifecycle-service test seeds a promoted fixture and verifies the terminal guard through the service; CLI-produced promoted-record coverage belongs to promotion.
 
 Tests build a CLI binary, invoke separate processes with disposable homes, and assert output, exit statuses, and files—not private database layout. The `hatchtest` build tag enables internal deterministic clock and abrupt-exit controls; these controls are absent from ordinary builds. Tests cover list ordering (including same-date creations and clock changes), empty lists, missing locations, list recovery, configuration defaults, TOML validation, XDG isolation, home expansion, retained locations and recovery after configuration changes, collisions, local-date persistence, concurrent creation, and interruption before/after directory creation and during/after registry completion. Run the suite on both macOS and Linux to exercise each platform's actual filesystem behavior.

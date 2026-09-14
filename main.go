@@ -16,10 +16,17 @@ var interrupt = func(string) {}
 const help = `Hatch manages experimental projects.
 
 Usage:
-  hatch new <name>   Create an active experimental project
-  hatch info <name>  Show persisted project information
-  hatch list         List name, creation date, and status, newest first
-  hatch help        Show this help
+  hatch new <name>              Create an active experimental project
+  hatch info <name>             Show persisted project information
+  hatch list                    List name, creation date, and status, newest first
+  hatch status <name> <status>  Reclassify without moving or changing files
+  hatch help                   Show this help
+
+Statuses: active (ongoing), completed (finished), abandoned (set aside).
+Switch freely among these statuses; repeating the current status succeeds.
+The promoted status is terminal and can only be set through promotion;
+it cannot be assigned or changed with status. Promotion is not yet available.
+Status preserves name, creation date, location, contents, and list order.
 
 Names: lowercase ASCII letters or digits separated by single hyphens.
 Projects: ~/experiments/YYYY-MM-DD-<name> by default.
@@ -46,13 +53,14 @@ func execute(args []string) error {
 		fmt.Print(help)
 		return nil
 	}
-	if len(args) == 2 && (args[0] == "new" || args[0] == "info" || args[0] == "list") && (args[1] == "--help" || args[1] == "-h") {
+	if len(args) == 2 && (args[0] == "new" || args[0] == "info" || args[0] == "list" || args[0] == "status") && (args[1] == "--help" || args[1] == "-h") {
 		fmt.Print(help)
 		return nil
 	}
 	listing := len(args) == 1 && args[0] == "list"
-	if !listing && (len(args) != 2 || (args[0] != "new" && args[0] != "info")) {
-		return fmt.Errorf("expected new <name>, info <name>, or list; use hatch --help")
+	changingStatus := len(args) == 3 && args[0] == "status"
+	if !listing && !changingStatus && (len(args) != 2 || (args[0] != "new" && args[0] != "info")) {
+		return fmt.Errorf("expected new <name>, info <name>, list, or status <name> <status>; use hatch --help")
 	}
 	var name string
 	if !listing {
@@ -98,6 +106,8 @@ func execute(args []string) error {
 	var p project
 	if args[0] == "new" {
 		p, err = store.create(name, now().In(time.Local).Format("2006-01-02"))
+	} else if changingStatus {
+		p, err = store.changeStatus(name, args[2])
 	} else {
 		p, err = store.info(name)
 	}
