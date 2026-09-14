@@ -72,6 +72,14 @@ func openStore(root, experiments string, create bool) (*store, error) {
 			return nil, err
 		}
 	}
+	// Upgrade existing registries under the same lock used for mutations and recovery.
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS pending_promotion (
+ singleton INTEGER PRIMARY KEY CHECK(singleton=1), name TEXT NOT NULL,
+ source TEXT NOT NULL, target TEXT NOT NULL, device TEXT NOT NULL, inode TEXT NOT NULL
+ )`); err != nil {
+		s.close()
+		return nil, err
+	}
 	if create {
 		if err := syncDirectory(root); err != nil {
 			s.close()
@@ -233,6 +241,9 @@ func (s *store) completeCreation(p project) error {
 }
 
 func (s *store) reconcile() error {
+	if err := s.reconcilePromotion(); err != nil {
+		return err
+	}
 	var p project
 	var dev, ino sql.NullString
 	err := s.db.QueryRow(`SELECT name,created_date,location,device,inode FROM pending_creation WHERE singleton=1`).Scan(&p.Name, &p.Date, &p.Location, &dev, &ino)

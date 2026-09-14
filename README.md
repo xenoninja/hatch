@@ -1,6 +1,6 @@
 # Hatch
 
-A standalone Go CLI for creating, listing, inspecting, and classifying experimental projects on macOS and Linux.
+A standalone Go CLI for creating, listing, inspecting, classifying, and promoting experimental projects on macOS and Linux.
 
 ## Build and use
 
@@ -12,6 +12,8 @@ go build -o hatch .
 ./hatch info project-alpha
 ./hatch status project-alpha completed
 ./hatch status --help
+./hatch promote project-alpha ~/work/project-alpha  # ~/work must already exist
+./hatch promote --help
 ./hatch list
 ./hatch list --help
 ./hatch --help
@@ -47,7 +49,15 @@ Switch freely among active, completed, and abandoned. Repeating the current non-
 
 Status changes use the shared mutation lock, pending-recovery guard, and a SQLite transaction. An interruption before commit leaves the previous status; after commit the new status persists. No filesystem move or pending status operation is needed.
 
-This release implements `new`, `info`, `list`, and `status`. Promotion and removal are intentionally deferred.
+## Promotion
+
+`hatch promote <name> <target-path>` moves an active, completed, or abandoned experimental project to an external destination. It preserves all existing contents without scaffolding changes, the name, creation date, and list order. `info` then reports terminal status `promoted` and the full new location; `list` still includes the project. Its name stays reserved, and subsequent promotion or status changes fail—even if the promoted files later disappear. Hatch does not track subsequent lifecycle changes at the destination.
+
+The target is the **exact final location**, not a containing directory. Absolute paths and paths relative to the working directory are accepted; the stored destination is absolute with parent symlinks resolved. The parent must already exist and the final target must be absent, including dangling symlinks. Hatch never creates missing parents, merges directories, or overwrites destinations. Missing, non-directory, or symlink source projects fail clearly. Destinations inside the current experiments directory or the source project are rejected, including symlink aliases and sources retained from an older configuration.
+
+Promotion uses an atomic no-replace rename on macOS and Linux. **Cross-filesystem moves are unsupported**: there is no copy/delete fallback, and failure leaves source files and committed metadata unchanged. Choose a destination on the source filesystem. Filesystems without support for exclusive rename fail rather than falling back to an unsafe move.
+
+This release implements `new`, `info`, `list`, `status`, and `promote`. Removal is intentionally deferred.
 
 ## Configuration and storage
 
@@ -80,6 +90,18 @@ In particular, interruption between making the directory and recording its ident
 
 Coordination assumes a local filesystem supporting SQLite locking, advisory locks, and directory syncing. It coordinates Hatch processes, not unrelated programs editing paths concurrently. Device/inode identity is evidence for ordinary restart recovery, not protection against malicious filesystem manipulation or inode reuse.
 
+## Promotion safety and recovery
+
+Promotion holds the same registry lock as creation, status changes, inspection, and recovery. Before moving anything it durably records the project name, source, exact destination, and source device/inode identity. After the rename, both parent directories are synced before the status/location update and intent deletion commit together.
+
+On the next registry command, even with changed configuration:
+
+- The original identified source exists and the destination is absent: clear the unexecuted intent, retaining the original status/location. Promotion can be retried.
+- The source is absent and the destination has the recorded directory identity: sync the parent directories and complete promotion.
+- Both paths exist, both are missing, either identity changed, or a path cannot be inspected reliably: preserve files and pending evidence, report both paths, and block registry commands (`new`, `info`, `list`, `status`, and `promote`). Help remains available.
+
+As with creation recovery, ambiguous states require manual investigation; do not delete registry evidence as a generic repair. The shared lock coordinates Hatch processes using the same registry, not unrelated filesystem edits or independent data homes. Exclusive rename also prevents a destination that appears at move time from being overwritten.
+
 ## Tests
 
 ```sh
@@ -89,6 +111,6 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /tmp/hatch-linux .
 CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o /tmp/hatch-macos .
 ```
 
-Status tests cover the complete non-promoted transition matrix, errors, preserved metadata/files/list order, changed configuration, unavailable locations, pending recovery, concurrent updates, and interruptions before/after commit. Until promotion lands, a narrow lifecycle-service test seeds a promoted fixture and verifies the terminal guard through the service; CLI-produced promoted-record coverage belongs to promotion.
+Status tests cover the complete non-promoted transition matrix, errors, preserved metadata/files/list order, changed configuration, unavailable locations, pending recovery, concurrent updates, and interruptions before/after commit. Promotion CLI tests cover every eligible starting status, retained metadata and contents, terminal guards and reserved names, exact paths and symlink aliases, changed configuration, collisions, cross-filesystem failures, interruption/recovery, ambiguous evidence, and competing mutations. A tagged filesystem-boundary hook injects EXDEV on every platform; an additional real cross-filesystem test uses `/dev/shm` when it is available on a different device (otherwise skipped).
 
 Tests build a CLI binary, invoke separate processes with disposable homes, and assert output, exit statuses, and files—not private database layout. The `hatchtest` build tag enables internal deterministic clock and abrupt-exit controls; these controls are absent from ordinary builds. Tests cover list ordering (including same-date creations and clock changes), empty lists, missing locations, list recovery, configuration defaults, TOML validation, XDG isolation, home expansion, retained locations and recovery after configuration changes, collisions, local-date persistence, concurrent creation, and interruption before/after directory creation and during/after registry completion. Run the suite on both macOS and Linux to exercise each platform's actual filesystem behavior.

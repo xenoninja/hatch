@@ -20,13 +20,23 @@ Usage:
   hatch info <name>             Show persisted project information
   hatch list                    List name, creation date, and status, newest first
   hatch status <name> <status>  Reclassify without moving or changing files
+  hatch promote <name> <target-path>  Move to an exact external destination
   hatch help                   Show this help
 
 Statuses: active (ongoing), completed (finished), abandoned (set aside).
 Switch freely among these statuses; repeating the current status succeeds.
 The promoted status is terminal and can only be set through promotion;
-it cannot be assigned or changed with status. Promotion is not yet available.
+it cannot be assigned or changed with status.
 Status preserves name, creation date, location, contents, and list order.
+Promote accepts active, completed, or abandoned projects and retains identity.
+Target-path is the exact final location (relative to the working directory or
+absolute), not a containing directory. Its parent must exist and the target
+must be absent. Symlink aliases are resolved; the destination must be outside
+both the current experiments directory and the source project.
+Promotion never merges, overwrites, creates parents, or copies across filesystems.
+Cross-filesystem moves are unsupported; use a destination on the same filesystem.
+Interrupted promotions recover on the next registry command; ambiguous states
+preserve files and evidence, report both paths, and block mutations.
 
 Names: lowercase ASCII letters or digits separated by single hyphens.
 Projects: ~/experiments/YYYY-MM-DD-<name> by default.
@@ -53,14 +63,15 @@ func execute(args []string) error {
 		fmt.Print(help)
 		return nil
 	}
-	if len(args) == 2 && (args[0] == "new" || args[0] == "info" || args[0] == "list" || args[0] == "status") && (args[1] == "--help" || args[1] == "-h") {
+	if len(args) == 2 && (args[0] == "new" || args[0] == "info" || args[0] == "list" || args[0] == "status" || args[0] == "promote") && (args[1] == "--help" || args[1] == "-h") {
 		fmt.Print(help)
 		return nil
 	}
 	listing := len(args) == 1 && args[0] == "list"
 	changingStatus := len(args) == 3 && args[0] == "status"
-	if !listing && !changingStatus && (len(args) != 2 || (args[0] != "new" && args[0] != "info")) {
-		return fmt.Errorf("expected new <name>, info <name>, list, or status <name> <status>; use hatch --help")
+	promoting := len(args) == 3 && args[0] == "promote"
+	if !listing && !changingStatus && !promoting && (len(args) != 2 || (args[0] != "new" && args[0] != "info")) {
+		return fmt.Errorf("expected new <name>, info <name>, list, status <name> <status>, or promote <name> <target-path>; use hatch --help")
 	}
 	var name string
 	if !listing {
@@ -106,6 +117,8 @@ func execute(args []string) error {
 	var p project
 	if args[0] == "new" {
 		p, err = store.create(name, now().In(time.Local).Format("2006-01-02"))
+	} else if promoting {
+		p, err = store.promote(name, args[2])
 	} else if changingStatus {
 		p, err = store.changeStatus(name, args[2])
 	} else {
