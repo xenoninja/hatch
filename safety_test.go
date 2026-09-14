@@ -75,12 +75,31 @@ func TestMissingLocationPreservesStatus(t *testing.T) {
 }
 
 func TestConcurrentCreation(t *testing.T) {
+	for _, configured := range []bool{false, true} {
+		name := "default"
+		if configured {
+			name = "configured"
+		}
+		t.Run(name, func(t *testing.T) { testConcurrentCreation(t, configured) })
+	}
+}
+
+func testConcurrentCreation(t *testing.T, configured bool) {
 	home := t.TempDir()
+	experiments := filepath.Join(home, "experiments")
+	var env []string
+	if configured {
+		outside := t.TempDir()
+		experiments = filepath.Join(outside, "nested", "experiments")
+		config := filepath.Join(outside, "config")
+		writeConfig(t, config, "experiments_dir = '"+experiments+"'")
+		env = []string{"XDG_CONFIG_HOME=" + config, "XDG_DATA_HOME=" + filepath.Join(outside, "nested", "data")}
+	}
 	var wg sync.WaitGroup
 	results := make(chan bool, 12)
 	for i := 0; i < 12; i++ {
 		wg.Add(1)
-		go func() { defer wg.Done(); _, err := invoke(home, nil, "new", "same"); results <- err == nil }()
+		go func() { defer wg.Done(); _, err := invoke(home, env, "new", "same"); results <- err == nil }()
 	}
 	wg.Wait()
 	close(results)
@@ -93,8 +112,8 @@ func TestConcurrentCreation(t *testing.T) {
 	if successes != 1 {
 		t.Fatalf("%d successful concurrent creates", successes)
 	}
-	contains(t, run(t, home, true, nil, "info", "same"), "Status: active")
-	entries, err := os.ReadDir(filepath.Join(home, "experiments"))
+	contains(t, run(t, home, true, env, "info", "same"), "Status: active", experiments)
+	entries, err := os.ReadDir(experiments)
 	if err != nil || len(entries) != 1 {
 		t.Fatalf("destinations: %v %v", entries, err)
 	}

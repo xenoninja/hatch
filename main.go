@@ -20,8 +20,13 @@ Usage:
   hatch help        Show this help
 
 Names: lowercase ASCII letters or digits separated by single hyphens.
-Defaults: ~/experiments/YYYY-MM-DD-<name>, ~/.local/share/hatch/hatch.db
-Configuration and XDG overrides are not yet supported.
+Projects: ~/experiments/YYYY-MM-DD-<name> by default.
+Config: $XDG_CONFIG_HOME/hatch/config.toml (default ~/.config/hatch/config.toml).
+  experiments_dir = "~/experiments" (absolute path or leading ~/).
+Registry: $XDG_DATA_HOME/hatch/hatch.db (default ~/.local/share/hatch/hatch.db).
+Empty or relative XDG homes use defaults. Missing config uses defaults;
+invalid config is an error. Changes affect new projects only; no files move.
+Storage is created lazily; help and fresh info do not initialize it.
 `
 
 func main() {
@@ -55,7 +60,12 @@ func execute(args []string) error {
 	if err != nil {
 		return err
 	}
-	store, err := openStore(home, args[0] == "new")
+	experiments, err := experimentsDirectory(home)
+	if err != nil {
+		return err
+	}
+	root := filepath.Join(xdgHome("XDG_DATA_HOME", filepath.Join(home, ".local", "share")), "hatch")
+	store, err := openStore(root, experiments, args[0] == "new")
 	if err != nil {
 		return err
 	}

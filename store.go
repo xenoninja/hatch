@@ -19,8 +19,7 @@ type store struct {
 	experiments string
 }
 
-func openStore(home string, create bool) (*store, error) {
-	root := filepath.Join(home, ".local", "share", "hatch")
+func openStore(root, experiments string, create bool) (*store, error) {
 	path := filepath.Join(root, "hatch.db")
 	if !create {
 		if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
@@ -30,7 +29,7 @@ func openStore(home string, create bool) (*store, error) {
 		}
 	}
 	if create {
-		if err := makeDurableDirectories(home, root, 0700); err != nil {
+		if err := makeDurableDirectories(root, 0700); err != nil {
 			return nil, err
 		}
 	}
@@ -52,7 +51,7 @@ func openStore(home string, create bool) (*store, error) {
 		lock.Close()
 		return nil, err
 	}
-	s := &store{db: db, lock: lock, experiments: filepath.Join(home, "experiments")}
+	s := &store{db: db, lock: lock, experiments: experiments}
 	db.SetMaxOpenConns(1)
 	if _, err = db.Exec(`PRAGMA synchronous=FULL; PRAGMA busy_timeout=5000;`); err != nil {
 		s.close()
@@ -93,19 +92,36 @@ func (s *store) info(name string) (project, error) {
 	return p, err
 }
 
-// Sync all ancestors through home, including existing ones: an earlier
-// invocation may have stopped between mkdir and syncing its parent.
-// Both callers construct path strictly beneath home.
-func makeDurableDirectories(home, path string, mode os.FileMode) error {
+// Sync readable ancestors, including existing ones: an earlier invocation
+// may have stopped between mkdir and syncing its parent. Before creating
+// anything, require the nearest existing ancestor to be syncable. Thus Hatch
+// never creates entries directly inside an unreadable ancestor; those farther
+// up the tree can safely terminate the sync walk (with stable permissions).
+func makeDurableDirectories(path string, mode os.FileMode) error {
+	for parent := path; ; parent = filepath.Dir(parent) {
+		_, err := os.Stat(parent)
+		if err == nil {
+			if err := syncDirectory(parent); err != nil {
+				return err
+			}
+			break
+		}
+		if !errors.Is(err, os.ErrNotExist) || parent == filepath.Dir(parent) {
+			return err
+		}
+	}
 	if err := os.MkdirAll(path, mode); err != nil {
 		return err
 	}
 	interrupt("before-storage-sync")
 	for current := path; ; current = filepath.Dir(current) {
 		if err := syncDirectory(current); err != nil {
+			if current != path && errors.Is(err, os.ErrPermission) {
+				return nil
+			}
 			return err
 		}
-		if current == home {
+		if current == filepath.Dir(current) {
 			return nil
 		}
 	}
@@ -148,7 +164,7 @@ func (s *store) create(name, date string) (project, error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return p, err
 	}
-	if err := makeDurableDirectories(filepath.Dir(s.experiments), s.experiments, 0755); err != nil {
+	if err := makeDurableDirectories(s.experiments, 0755); err != nil {
 		return p, err
 	}
 	if _, err := s.db.Exec(`INSERT INTO pending_creation(singleton,name,created_date,location) VALUES(1,?,?,?)`, name, date, p.Location); err != nil {

@@ -2,7 +2,10 @@ module github.com/xenoninja/hatch
 
 go 1.24.0
 
-require modernc.org/sqlite v1.46.1
+require (
+	github.com/pelletier/go-toml/v2 v2.2.4
+	modernc.org/sqlite v1.46.1
+)
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
