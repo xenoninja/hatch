@@ -88,6 +88,18 @@ func openStore(root, experiments string, create bool) (*store, error) {
 		s.close()
 		return nil, err
 	}
+	// Existing macOS registries predate durable Linux trash metadata receipts.
+	var hasTrashInfo int
+	if err := db.QueryRow(`SELECT count(*) FROM pragma_table_info('pending_removal') WHERE name='trash_info'`).Scan(&hasTrashInfo); err != nil {
+		s.close()
+		return nil, err
+	}
+	if hasTrashInfo == 0 {
+		if _, err := db.Exec(`ALTER TABLE pending_removal ADD COLUMN trash_info TEXT NOT NULL DEFAULT ''`); err != nil {
+			s.close()
+			return nil, err
+		}
+	}
 	if create {
 		if err := syncDirectory(root); err != nil {
 			s.close()

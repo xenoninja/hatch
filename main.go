@@ -21,7 +21,7 @@ Usage:
   hatch list                    List name, creation date, and status, newest first
   hatch status <name> <status>  Reclassify without moving or changing files
   hatch promote <name> <target-path>  Move to an exact external destination
-  hatch remove <name> [--force]  Trash files and end tracking (macOS)
+  hatch remove <name> [--force]  Trash files and end tracking
   hatch help                   Show this help
 
 Statuses: active (ongoing), completed (finished), abandoned (set aside).
@@ -41,8 +41,9 @@ preserve files and evidence, report both paths, and block mutations.
 Remove rejects promoted projects, even when their files are missing.
 Missing files allow record-only removal. Both forms require interactive consent
 or --force (confirmation only); force never bypasses lifecycle or safety checks.
-Removal uses native macOS trash, never permanent deletion. Linux trash is
-unavailable in this release; record-only removal works on both platforms.
+Removal uses native macOS trash or Linux freedesktop home trash, never permanent
+deletion. Linux requires a safe home trash on the source filesystem; per-mount
+trash and cross-filesystem copy/delete fallback are unsupported.
 Trash failures retain tracking. Successful removal releases the name, but new
 still refuses an existing dated destination. No restore command is provided.
 Interrupted removals recover when evidence proves the outcome; ambiguous states

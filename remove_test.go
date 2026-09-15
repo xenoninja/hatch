@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -279,19 +278,9 @@ func TestRemoveFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out := run(t, home, runtime.GOOS == "darwin", nil, "remove", "example", "--force")
-	if runtime.GOOS != "darwin" {
-		contains(t, out, "trash unavailable")
-		contains(t, run(t, home, true, nil, "info", "example"), "Status: active")
-		return
-	}
+	out := run(t, home, true, nil, "remove", "example", "--force")
 	contains(t, out, "Trashed to: ", "Removed")
-	var target string
-	for _, line := range strings.Split(out, "\n") {
-		if strings.HasPrefix(line, "Trashed to: ") {
-			target = strings.TrimPrefix(line, "Trashed to: ")
-		}
-	}
+	target := trashPath(t, out)
 	data, err := os.ReadFile(filepath.Join(target, "keep.txt"))
 	if err != nil || string(data) != "precious contents" {
 		t.Fatalf("trash contents: %q %v", data, err)
@@ -310,6 +299,17 @@ func TestRemoveFiles(t *testing.T) {
 	absent(t, source)
 	run(t, home, false, nil, "info", "example")
 	run(t, home, true, nil, "new", "example")
+}
+
+func trashPath(t *testing.T, out string) string {
+	t.Helper()
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "Trashed to: ") {
+			return strings.TrimPrefix(line, "Trashed to: ")
+		}
+	}
+	t.Fatalf("missing trash receipt: %s", out)
+	return ""
 }
 
 func TestRemoveMissingRequiresConsent(t *testing.T) {

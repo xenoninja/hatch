@@ -62,10 +62,10 @@ func (s *store) completeRemoval(name, source string) error {
 }
 
 func (s *store) reconcileRemoval() error {
-	var name, source, target string
+	var name, source, target, trashInfo string
 	var expected directoryID
 	var inFlight bool
-	err := s.db.QueryRow(`SELECT name,source,target,device,inode,in_flight FROM pending_removal WHERE singleton=1`).Scan(&name, &source, &target, &expected.device, &expected.inode, &inFlight)
+	err := s.db.QueryRow(`SELECT name,source,target,device,inode,in_flight,trash_info FROM pending_removal WHERE singleton=1`).Scan(&name, &source, &target, &expected.device, &expected.inode, &inFlight, &trashInfo)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
@@ -80,13 +80,16 @@ func (s *store) reconcileRemoval() error {
 	if target != "" && errors.Is(sourceErr, os.ErrNotExist) {
 		trashed, err := directoryIdentity(target)
 		if err == nil && trashed == expected {
+			if receiptErr := syncTrashInfo(target, trashInfo); receiptErr != nil {
+				return fmt.Errorf("%s: %w", uncertainRemoval(name, source, target, trashInfo), receiptErr)
+			}
 			if err := syncMoveParents(source, target); err != nil {
 				return err
 			}
 			return s.completeRemoval(name, source)
 		}
 	}
-	return fmt.Errorf("uncertain interrupted removal of %q: source %s, trash receipt %q; tracking and pending evidence retained, mutations blocked; manual investigation required", name, source, target)
+	return errors.New(uncertainRemoval(name, source, target, trashInfo))
 }
 
 func (s *store) remove(name string, force bool) error {
@@ -132,7 +135,10 @@ func (s *store) remove(name string, force bool) error {
 			return err
 		}
 		interrupt("trash-in-flight")
-		target, err := trashDirectory(p.Location)
+		target, err := trashDirectory(p.Location, func(target, info string) error {
+			_, err := s.db.Exec(`UPDATE pending_removal SET target=?,trash_info=? WHERE singleton=1`, target, info)
+			return err
+		})
 		if err != nil {
 			if _, dbErr := s.db.Exec(`UPDATE pending_removal SET in_flight=0 WHERE singleton=1`); dbErr != nil {
 				return fmt.Errorf("trash failed: %w; could not record helper completion: %v; pending evidence retained", err, dbErr)

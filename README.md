@@ -4,7 +4,7 @@ A standalone Go CLI for creating, listing, inspecting, classifying, promoting, a
 
 ## Build and use
 
-Requires Go 1.24 or newer to build; the resulting binary needs no Go runtime or SQLite installation.
+Requires Go 1.24 or newer to build on macOS or Linux; the resulting binary needs no Go runtime or SQLite installation. Use `CGO_ENABLED=0 go build -o hatch .` for a standalone binary, then optionally install it with `install -m 0755 hatch ~/.local/bin/hatch` (create `~/.local/bin` and add it to `PATH` first). Build without the `hatchtest` tag for normal use.
 
 ```sh
 go build -o hatch .
@@ -62,7 +62,15 @@ Promotion uses an atomic no-replace rename on macOS and Linux. **Cross-filesyste
 
 ## Removal
 
-`hatch remove <name> [--force]` ends tracking of an active, completed, or abandoned project. Existing project directories go to **native macOS trash** through Foundation and the system `/usr/bin/osascript` bridge, without Finder automation. macOS chooses the per-volume trash location and resolves name collisions; Hatch never empties trash, overwrites another trash entry, or permanently deletes as a fallback. Symlink and non-directory source entries are rejected rather than followed or deleted. Trash failures retain tracking and report an error. Linux builds safely report unavailable trash for existing-file removal until Linux support lands.
+`hatch remove <name> [--force]` ends tracking of an active, completed, or abandoned project. Existing project directories go to native trash. On **macOS**, Foundation and the system `/usr/bin/osascript` bridge choose the per-volume trash location and resolve name collisions, without Finder automation. On **Linux**, Hatch uses the [freedesktop Trash specification](https://specifications.freedesktop.org/trash-spec/latest/): payloads in `$XDG_DATA_HOME/Trash/files` and matching `.trashinfo` files in `$XDG_DATA_HOME/Trash/info` (default `~/.local/share/Trash`). Metadata contains the percent-encoded absolute original path and local deletion timestamp for desktop restoration; collision-resistant names, exclusive metadata creation, and no-replace rename prevent overwriting existing entries.
+
+Hatch never empties trash, overwrites another trash entry, or permanently deletes as a fallback. Symlink and non-directory source entries are rejected rather than followed or deleted. Trash failures retain tracking and report an error.
+
+### Linux requirements and limitations
+
+Linux removal currently supports **home trash on the source filesystem only**. Per-mount `.Trash/$uid` and `.Trash-$uid` discovery is not implemented. If home trash is on another filesystem, Hatch refuses removal rather than copying and deleting or creating a nonstandard trash destination. Missing-file record-only removal still works. The trash root, `files`, and `info` must be real directories owned by the current user with mode `0700`; Hatch creates missing directories but will not repair permissions or follow symlinks at those entries. The filesystem must support exclusive rename, file/directory syncing, and the registry locking described below. An unavailable, unsafe, or unsupported trash produces an error; `--force` cannot override it.
+
+Linux integration tests exercise real filesystem trash entries, not a desktop session. Desktop trash-browser visibility and GUI restoration require a separate check in the target desktop environment. Hatch itself provides no restore command.
 
 If files are missing, Hatch explicitly describes **record-only removal**. Both forms prompt on a terminal and accept `y` or `yes` (case-insensitive); any other answer declines, and EOF fails without consent. Noninteractive use requires `--force`; piping `yes` is not consent. `--force` skips confirmation **only**, never lifecycle, path, trash, or recovery checks. Promoted projects are always rejected, including when their files are missing.
 
@@ -70,13 +78,17 @@ Successful removal releases the name for reuse. `new` still refuses any existing
 
 ### Removal safety and recovery
 
-Removal holds the same registry lock through confirmation, trash, and registry commit, so competing removals cannot both act on a project. Before the native trash call, a durable intent records the name, source, and directory device/inode, then marks the native operation as potentially in flight. This marker prevents recovery from clearing evidence while an orphaned system helper could still move files after Hatch is killed. A synchronously returned failure clears that marker before checking whether the unchanged source proves a safe failure. After a successful call, Hatch persists the returned exact trash path as a receipt, verifies the moved directory identity, and syncs both parent directories before deleting the project record and intent in one transaction. Record-only removal needs just that atomic registry transaction and rechecks absence after consent.
+Removal holds the same registry lock through confirmation, trash, and registry commit, so competing removals cannot both act on a project. Before the native trash call, a durable intent records the name, source, and directory device/inode, then marks the native operation as potentially in flight. This marker prevents recovery from clearing evidence while an orphaned macOS helper could still move files after Hatch is killed. A synchronously returned failure clears that marker before checking whether the unchanged source proves a safe failure. On macOS, Hatch persists the returned exact trash path after Foundation succeeds.
+
+On Linux, Hatch persists the selected payload path and exact expected `.trashinfo` contents **before creating either entry**. It exclusively creates, writes, and syncs metadata and its parent before moving the payload with an atomic no-replace rename. Recovery requires the exact regular metadata file as well as the payload identity; a missing, partial, changed, or symlink metadata entry cannot release tracking. A crash after the payload move can therefore recover even before the native call returns. A planned operation interrupted before the payload move conservatively blocks for manual investigation, reporting both trash paths—even if the source is still present. Hatch leaves partial metadata as evidence and never guesses whether an existing entry belongs to another trash client.
+
+After a successful move, Hatch verifies the moved directory identity and syncs both move parents (and Linux metadata) before deleting the project record and intent in one transaction. Record-only removal needs just that atomic registry transaction and rechecks absence after consent. Existing registries are upgraded under the shared lock without changing pending macOS recovery semantics.
 
 On the next registry command:
 
 - No receipt, no potentially in-flight helper, and the original identified source remains: clear the unexecuted intent and retain tracking.
-- A receipt exists, the source is absent, and the trash directory matches the recorded identity: sync the parents and finish ending tracking.
-- A potentially in-flight helper without a receipt (even if the source still exists), source missing without a receipt (including a crash after macOS moved files but before Hatch recorded the result), changed identities, both paths present/missing, or inaccessible evidence: retain tracking and pending evidence, report the source and any receipt, and block registry commands, including forced removal. Help stays available.
+- A receipt exists, the source is absent, and the trash directory matches the recorded identity (with exact restoration metadata for Linux): sync the evidence and parents and finish ending tracking.
+- A potentially in-flight operation without a receipt (even if the source still exists), source missing without a receipt (including a crash after macOS moved files but before Hatch recorded the result), an incomplete Linux plan, changed identities, both paths present/missing, or inaccessible/invalid evidence: retain tracking and pending evidence, report the source and any payload/metadata paths, and block registry commands, including forced removal. Help stays available.
 
 Recovery never searches or modifies other trash entries. An uncertain outcome requires manual investigation; preserve the registry and reported paths rather than deleting pending evidence. In particular, moving or emptying the trash entry before recovery may make an interrupted removal ambiguous. The advisory lock coordinates Hatch processes sharing one registry, not unrelated programs editing files concurrently.
 
@@ -132,7 +144,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /tmp/hatch-linux .
 CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o /tmp/hatch-macos .
 ```
 
-Removal CLI tests cover confirmation/decline/EOF, noninteractive refusal, force, missing files, promoted-to-remove guards, eligible statuses, trash failures/collisions, name reuse and dated destination refusal, competing removals, interruption points, and ambiguous recovery. A real macOS integration test trashes a disposable project and verifies its contents at the returned path; cleanup is limited to that identity-checked entry. Tagged terminal and trash-boundary controls exercise failure/recovery deterministically without affecting production builds. Linux exercises its actual unavailable-trash boundary.
+Removal CLI tests cover confirmation/decline/EOF, noninteractive refusal, force, missing files, promoted-to-remove guards, eligible statuses, trash failures/collisions, name reuse and dated destination refusal, competing removals, interruption points, and ambiguous recovery. Real macOS and Linux integration tests trash disposable projects and verify contents at the returned paths. macOS cleanup is limited to the identity-checked entry; Linux trash and metadata live entirely inside disposable test homes. Linux-specific tests cover path encoding and deletion dates, name reuse, unsafe/symlink trash, a real second-filesystem refusal, payload/metadata collisions with another trash client, interrupted metadata/payload/registry operations, damaged metadata, and competing native remove/promote operations. Tagged terminal and trash-boundary controls exercise failure/recovery deterministically without affecting production builds. CI runs the shared suite, vet, and standalone builds on both macOS and Linux.
 
 Status tests cover the complete non-promoted transition matrix, errors, preserved metadata/files/list order, changed configuration, unavailable locations, pending recovery, concurrent updates, and interruptions before/after commit. Promotion CLI tests cover every eligible starting status, retained metadata and contents, terminal guards and reserved names, exact paths and symlink aliases, changed configuration, collisions, cross-filesystem failures, interruption/recovery, ambiguous evidence, and competing mutations. A tagged filesystem-boundary hook injects EXDEV on every platform; an additional real cross-filesystem test uses `/dev/shm` when it is available on a different device (otherwise skipped).
 

@@ -10,7 +10,7 @@ import (
 // Foundation selects the native per-volume trash and a collision-free name.
 // AppleScriptObjC supports Foundation's output parameters without cgo or Finder
 // automation. A failed call may still have moved files: reconcile evidence.
-func nativeTrash(source string) (string, error) {
+func nativeTrash(source string, _ recordTrashPlan) (string, error) {
 	const script = `use framework "Foundation"
 on run argv
  set sourceURL to current application's NSURL's fileURLWithPath:(item 1 of argv)
