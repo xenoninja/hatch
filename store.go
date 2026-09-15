@@ -80,6 +80,14 @@ func openStore(root, experiments string, create bool) (*store, error) {
 		s.close()
 		return nil, err
 	}
+	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS pending_removal (
+ singleton INTEGER PRIMARY KEY CHECK(singleton=1), name TEXT NOT NULL,
+ source TEXT NOT NULL, target TEXT NOT NULL DEFAULT '', device TEXT NOT NULL, inode TEXT NOT NULL,
+ in_flight INTEGER NOT NULL DEFAULT 0 CHECK(in_flight IN (0,1))
+ )`); err != nil {
+		s.close()
+		return nil, err
+	}
 	if create {
 		if err := syncDirectory(root); err != nil {
 			s.close()
@@ -152,6 +160,15 @@ func makeDurableDirectories(path string, mode os.FileMode) error {
 			return nil
 		}
 	}
+}
+
+func syncMoveParents(source, target string) error {
+	for _, parent := range []string{filepath.Dir(source), filepath.Dir(target)} {
+		if err := syncDirectory(parent); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func syncDirectory(path string) error {
@@ -241,6 +258,9 @@ func (s *store) completeCreation(p project) error {
 }
 
 func (s *store) reconcile() error {
+	if err := s.reconcileRemoval(); err != nil {
+		return err
+	}
 	if err := s.reconcilePromotion(); err != nil {
 		return err
 	}

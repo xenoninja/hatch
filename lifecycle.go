@@ -6,6 +6,13 @@ import (
 	"fmt"
 )
 
+func guardUnpromoted(p project) error {
+	if p.Status == "promoted" {
+		return fmt.Errorf("experimental project %q is already promoted: its status is terminal", p.Name)
+	}
+	return nil
+}
+
 // changeStatus runs under the store's shared mutation lock. Reclassification
 // touches only the registry, so it needs no filesystem intent record.
 func (s *store) changeStatus(name, status string) (project, error) {
@@ -32,8 +39,8 @@ func (s *store) changeStatus(name, status string) (project, error) {
 	if err != nil {
 		return p, err
 	}
-	if p.Status == "promoted" {
-		return p, fmt.Errorf("experimental project %q is promoted: its status is terminal", name)
+	if err := guardUnpromoted(p); err != nil {
+		return p, err
 	}
 	if _, err := tx.Exec(`UPDATE projects SET status=? WHERE name=?`, status, name); err != nil {
 		return p, err

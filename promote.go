@@ -14,10 +14,8 @@ var moveDirectory = renameExclusive
 
 func (s *store) completePromotion(name, source, target string) error {
 	// Sync both rename entries before committing the new registry location.
-	for _, parent := range []string{filepath.Dir(source), filepath.Dir(target)} {
-		if err := syncDirectory(parent); err != nil {
-			return err
-		}
+	if err := syncMoveParents(source, target); err != nil {
+		return err
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -168,8 +166,8 @@ func (s *store) promote(name, target string) (project, error) {
 	if err != nil {
 		return p, err
 	}
-	if p.Status == "promoted" {
-		return p, fmt.Errorf("experimental project %q is already promoted: promotion is terminal", name)
+	if err := guardUnpromoted(p); err != nil {
+		return p, err
 	}
 	identity, err := directoryIdentity(p.Location)
 	if err != nil {

@@ -1,6 +1,6 @@
 # Hatch
 
-A standalone Go CLI for creating, listing, inspecting, classifying, and promoting experimental projects on macOS and Linux.
+A standalone Go CLI for creating, listing, inspecting, classifying, promoting, and safely removing experimental projects on macOS and Linux.
 
 ## Build and use
 
@@ -14,6 +14,9 @@ go build -o hatch .
 ./hatch status --help
 ./hatch promote project-alpha ~/work/project-alpha  # ~/work must already exist
 ./hatch promote --help
+./hatch remove another-project              # interactive confirmation
+./hatch remove another-project --force      # skip confirmation only
+./hatch remove --help
 ./hatch list
 ./hatch list --help
 ./hatch --help
@@ -57,7 +60,25 @@ The target is the **exact final location**, not a containing directory. Absolute
 
 Promotion uses an atomic no-replace rename on macOS and Linux. **Cross-filesystem moves are unsupported**: there is no copy/delete fallback, and failure leaves source files and committed metadata unchanged. Choose a destination on the source filesystem. Filesystems without support for exclusive rename fail rather than falling back to an unsafe move.
 
-This release implements `new`, `info`, `list`, `status`, and `promote`. Removal is intentionally deferred.
+## Removal
+
+`hatch remove <name> [--force]` ends tracking of an active, completed, or abandoned project. Existing project directories go to **native macOS trash** through Foundation and the system `/usr/bin/osascript` bridge, without Finder automation. macOS chooses the per-volume trash location and resolves name collisions; Hatch never empties trash, overwrites another trash entry, or permanently deletes as a fallback. Symlink and non-directory source entries are rejected rather than followed or deleted. Trash failures retain tracking and report an error. Linux builds safely report unavailable trash for existing-file removal until Linux support lands.
+
+If files are missing, Hatch explicitly describes **record-only removal**. Both forms prompt on a terminal and accept `y` or `yes` (case-insensitive); any other answer declines, and EOF fails without consent. Noninteractive use requires `--force`; piping `yes` is not consent. `--force` skips confirmation **only**, never lifecycle, path, trash, or recovery checks. Promoted projects are always rejected, including when their files are missing.
+
+Successful removal releases the name for reuse. `new` still refuses any existing dated destination. Changing configuration does not redirect removal: it uses the project's recorded location. There is no restore command or permanent-deletion mode.
+
+### Removal safety and recovery
+
+Removal holds the same registry lock through confirmation, trash, and registry commit, so competing removals cannot both act on a project. Before the native trash call, a durable intent records the name, source, and directory device/inode, then marks the native operation as potentially in flight. This marker prevents recovery from clearing evidence while an orphaned system helper could still move files after Hatch is killed. A synchronously returned failure clears that marker before checking whether the unchanged source proves a safe failure. After a successful call, Hatch persists the returned exact trash path as a receipt, verifies the moved directory identity, and syncs both parent directories before deleting the project record and intent in one transaction. Record-only removal needs just that atomic registry transaction and rechecks absence after consent.
+
+On the next registry command:
+
+- No receipt, no potentially in-flight helper, and the original identified source remains: clear the unexecuted intent and retain tracking.
+- A receipt exists, the source is absent, and the trash directory matches the recorded identity: sync the parents and finish ending tracking.
+- A potentially in-flight helper without a receipt (even if the source still exists), source missing without a receipt (including a crash after macOS moved files but before Hatch recorded the result), changed identities, both paths present/missing, or inaccessible evidence: retain tracking and pending evidence, report the source and any receipt, and block registry commands, including forced removal. Help stays available.
+
+Recovery never searches or modifies other trash entries. An uncertain outcome requires manual investigation; preserve the registry and reported paths rather than deleting pending evidence. In particular, moving or emptying the trash entry before recovery may make an interrupted removal ambiguous. The advisory lock coordinates Hatch processes sharing one registry, not unrelated programs editing files concurrently.
 
 ## Configuration and storage
 
@@ -110,6 +131,8 @@ go test ./...
 CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /tmp/hatch-linux .
 CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -o /tmp/hatch-macos .
 ```
+
+Removal CLI tests cover confirmation/decline/EOF, noninteractive refusal, force, missing files, promoted-to-remove guards, eligible statuses, trash failures/collisions, name reuse and dated destination refusal, competing removals, interruption points, and ambiguous recovery. A real macOS integration test trashes a disposable project and verifies its contents at the returned path; cleanup is limited to that identity-checked entry. Tagged terminal and trash-boundary controls exercise failure/recovery deterministically without affecting production builds. Linux exercises its actual unavailable-trash boundary.
 
 Status tests cover the complete non-promoted transition matrix, errors, preserved metadata/files/list order, changed configuration, unavailable locations, pending recovery, concurrent updates, and interruptions before/after commit. Promotion CLI tests cover every eligible starting status, retained metadata and contents, terminal guards and reserved names, exact paths and symlink aliases, changed configuration, collisions, cross-filesystem failures, interruption/recovery, ambiguous evidence, and competing mutations. A tagged filesystem-boundary hook injects EXDEV on every platform; an additional real cross-filesystem test uses `/dev/shm` when it is available on a different device (otherwise skipped).
 

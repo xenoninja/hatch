@@ -26,7 +26,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func invoke(home string, controls []string, args ...string) (string, error) {
+func command(home string, controls []string, args ...string) *exec.Cmd {
 	cmd := exec.Command(binary, args...)
 	for _, e := range os.Environ() {
 		if !strings.HasPrefix(e, "HOME=") && !strings.HasPrefix(e, "TZ=") && !strings.HasPrefix(e, "HATCH_TEST_") && !strings.HasPrefix(e, "XDG_") {
@@ -35,7 +35,11 @@ func invoke(home string, controls []string, args ...string) (string, error) {
 	}
 	cmd.Env = append(cmd.Env, "HOME="+home, "TZ=America/Los_Angeles", "HATCH_TEST_TIME=2026-09-15T01:30:00Z")
 	cmd.Env = append(cmd.Env, controls...)
-	out, err := cmd.CombinedOutput()
+	return cmd
+}
+
+func invoke(home string, controls []string, args ...string) (string, error) {
+	out, err := command(home, controls, args...).CombinedOutput()
 	return string(out), err
 }
 func run(t *testing.T, home string, success bool, controls []string, args ...string) string {
