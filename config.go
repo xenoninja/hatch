@@ -30,41 +30,54 @@ func experimentsDirectory(home string) (string, error) {
 	}
 	directory := *config.ExperimentsDir
 	if strings.HasPrefix(directory, "~/") {
-		directory = filepath.Join(home, directory[2:])
+		directory = home + string(filepath.Separator) + directory[2:]
 	}
 	if !filepath.IsAbs(directory) {
 		return "", fmt.Errorf("configuration %s: experiments_dir must be absolute or begin with ~/", path)
 	}
-	directory = filepath.Clean(directory)
-	if err := validateDirectory(directory); err != nil {
+	directory, err = resolveConfiguredDirectory(directory)
+	if err != nil {
 		return "", fmt.Errorf("configuration %s: invalid experiments_dir: %w", path, err)
 	}
 	return directory, nil
 }
 
-// Missing directories are valid and created lazily. Check existing ancestors
-// too, so a file or broken symlink cannot masquerade as a usable directory.
-func validateDirectory(path string) error {
-	for current := path; ; current = filepath.Dir(current) {
-		info, err := os.Stat(current)
-		if err == nil {
-			if !info.IsDir() {
-				return fmt.Errorf("not a directory: %s", current)
+// Resolve components before processing later ".." entries: lexical cleaning
+// would discard symlinks (and invalid existing components). Missing directories
+// remain valid without being created until a mutation needs them.
+func resolveConfiguredDirectory(path string) (string, error) {
+	current := string(filepath.Separator)
+	for _, component := range strings.Split(path, string(filepath.Separator)) {
+		if component == "" || component == "." {
+			continue
+		}
+		if component == ".." {
+			current = filepath.Dir(current)
+			continue
+		}
+		current = filepath.Join(current, component)
+		info, err := os.Lstat(current)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			current, err = filepath.EvalSymlinks(current)
+			if err != nil {
+				return "", err
 			}
-			return nil
+			info, err = os.Stat(current)
+			if err != nil {
+				return "", err
+			}
 		}
-		if !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		if _, linkErr := os.Lstat(current); linkErr == nil {
-			return fmt.Errorf("unavailable directory: %s", current)
-		} else if !errors.Is(linkErr, os.ErrNotExist) {
-			return linkErr
-		}
-		if current == filepath.Dir(current) {
-			return err
+		if !info.IsDir() {
+			return "", fmt.Errorf("not a directory: %s", current)
 		}
 	}
+	return current, nil
 }
 
 // XDG homes must be absolute; empty and relative values use the defaults.

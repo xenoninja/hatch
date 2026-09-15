@@ -220,6 +220,9 @@ func (s *store) create(name, date string) (project, error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return p, err
 	}
+	if err := s.guardIndependentLocation(p.Location, ""); err != nil {
+		return p, err
+	}
 	if err := makeDurableDirectories(s.experiments, 0755); err != nil {
 		return p, err
 	}
@@ -260,7 +263,7 @@ func (s *store) completeCreation(p project) error {
 	}
 	defer tx.Rollback()
 	if _, err := tx.Exec(`INSERT INTO projects(name,created_date,status,location) VALUES(?,?,?,?)`, p.Name, p.Date, p.Status, p.Location); err != nil {
-		return err
+		return fmt.Errorf("cannot register experimental project %q at %s: %w; files and pending evidence preserved; manual investigation required", p.Name, p.Location, err)
 	}
 	if _, err := tx.Exec(`DELETE FROM pending_creation WHERE singleton=1`); err != nil {
 		return err

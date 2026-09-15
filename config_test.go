@@ -51,13 +51,46 @@ func TestConfiguredExperiments(t *testing.T) {
 	}
 }
 
+func TestConfiguredExperimentsResolveSymlinkBeforeParent(t *testing.T) {
+	for _, kind := range []string{"absolute", "tilde"} {
+		t.Run(kind, func(t *testing.T) {
+			home, err := filepath.EvalSymlinks(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.MkdirAll(filepath.Join(home, "real", "nested"), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink("real/nested", filepath.Join(home, "alias")); err != nil {
+				t.Fatal(err)
+			}
+			configured := home + "/alias/../experiments"
+			if kind == "tilde" {
+				configured = "~/alias/../experiments"
+			}
+			writeConfig(t, filepath.Join(home, ".config"), "experiments_dir = '"+configured+"'")
+			want := filepath.Join(home, "real", "experiments")
+			lexical := filepath.Join(home, "experiments")
+			contains(t, run(t, home, false, nil, "info", "first"), "unknown")
+			absent(t, want, lexical, filepath.Join(home, ".local"))
+			location := filepath.Join(want, "2026-09-14-first")
+			contains(t, run(t, home, true, nil, "new", "first"), location)
+			contains(t, run(t, home, true, nil, "info", "first"), location)
+			if info, err := os.Stat(location); err != nil || !info.IsDir() {
+				t.Fatalf("expected project directory %s: %v", location, err)
+			}
+			absent(t, lexical)
+		})
+	}
+}
+
 func TestInvalidConfiguration(t *testing.T) {
-	for _, value := range []string{"experiments_dir = [", "experiments_dir = 42", "experiments_dir = ''", "experiments_dir = 'relative/path'", "experiments_dir = '~other/path'", "experiments_dir = '~'", "experiments_dir = \"/bad\\u0000path\"", "file", "file-parent", "dangling-link"} {
+	for _, value := range []string{"experiments_dir = [", "experiments_dir = 42", "experiments_dir = ''", "experiments_dir = 'relative/path'", "experiments_dir = '~other/path'", "experiments_dir = '~'", "experiments_dir = \"/bad\\u0000path\"", "file", "file-parent", "file-before-parent", "dangling-link", "dangling-link-before-parent"} {
 		t.Run(value, func(t *testing.T) {
 			home := t.TempDir()
-			if value == "file" || value == "file-parent" || value == "dangling-link" {
+			if value == "file" || value == "file-parent" || value == "file-before-parent" || value == "dangling-link" || value == "dangling-link-before-parent" {
 				path := filepath.Join(home, "not-directory")
-				if value == "dangling-link" {
+				if value == "dangling-link" || value == "dangling-link-before-parent" {
 					if err := os.Symlink("missing", path); err != nil {
 						t.Fatal(err)
 					}
@@ -66,6 +99,9 @@ func TestInvalidConfiguration(t *testing.T) {
 				}
 				if value == "file-parent" {
 					path = filepath.Join(path, "child")
+				}
+				if value == "file-before-parent" || value == "dangling-link-before-parent" {
+					path += "/../experiments"
 				}
 				value = "experiments_dir = '" + path + "'"
 			}

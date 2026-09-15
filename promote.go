@@ -151,12 +151,8 @@ func (s *store) promotionTarget(source, target string) (string, error) {
 			return "", fmt.Errorf("promotion destination %s must be outside %s", target, resolved)
 		}
 	}
-	var count int
-	if err := s.db.QueryRow(`SELECT count(*) FROM projects WHERE location=?`, target).Scan(&count); err != nil {
+	if err := s.guardIndependentLocation(target, ""); err != nil {
 		return "", err
-	}
-	if count != 0 {
-		return "", fmt.Errorf("destination already tracked: %s", target)
 	}
 	return target, nil
 }
@@ -167,6 +163,9 @@ func (s *store) promote(name, target string) (project, error) {
 		return p, err
 	}
 	if err := guardUnpromoted(p); err != nil {
+		return p, err
+	}
+	if err := s.guardIndependentLocation(p.Location, name); err != nil {
 		return p, err
 	}
 	identity, err := directoryIdentity(p.Location)

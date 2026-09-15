@@ -1,29 +1,29 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
 func TestPromotedStatusIsTerminal(t *testing.T) {
-	s, err := openStore(filepath.Join(t.TempDir(), "registry"), t.TempDir(), true)
-	if err != nil {
+	home := t.TempDir()
+	run(t, home, true, nil, "new", "graduated")
+	source := filepath.Join(home, "experiments", "2026-09-14-graduated")
+	if err := os.WriteFile(filepath.Join(source, "keep"), []byte("project contents"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	defer s.close()
-	// Promotion is not implemented yet. Seed its persisted result only as
-	// fixture setup; exercise and observe behavior through the service seam.
-	want := project{"graduated", "2026-09-14", "promoted", filepath.Join(t.TempDir(), "destination")}
-	if _, err := s.db.Exec(`INSERT INTO projects(name,created_date,status,location) VALUES(?,?,?,?)`, want.Name, want.Date, want.Status, want.Location); err != nil {
-		t.Fatal(err)
-	}
+	destination := filepath.Join(home, "destination")
+	run(t, home, true, nil, "promote", "graduated", destination)
+	want := run(t, home, true, nil, "info", "graduated")
 	for _, status := range []string{"active", "completed", "abandoned", "promoted"} {
-		if _, err := s.changeStatus(want.Name, status); err == nil || !strings.Contains(err.Error(), "promot") {
-			t.Fatalf("status %s: %v", status, err)
+		contains(t, run(t, home, false, nil, "status", "graduated", status), "promot")
+		if got := run(t, home, true, nil, "info", "graduated"); got != want {
+			t.Fatalf("changed promoted record: %s", got)
 		}
-		if got, err := s.info(want.Name); err != nil || got != want {
-			t.Fatalf("changed promoted record: %+v %v", got, err)
+		data, err := os.ReadFile(filepath.Join(destination, "keep"))
+		if err != nil || string(data) != "project contents" {
+			t.Fatalf("changed project files: %q %v", data, err)
 		}
 	}
 }

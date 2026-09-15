@@ -100,11 +100,11 @@ Hatch reads `$XDG_CONFIG_HOME/hatch/config.toml`, defaulting to `~/.config/hatch
 experiments_dir = "~/work/experiments"
 ```
 
-`experiments_dir` accepts an absolute path or a path starting with `~/` (expanded using your home directory). Other relative paths, empty values, non-string values, malformed TOML, and paths whose existing components are not usable directories produce errors rather than falling back. Missing configuration or an omitted key uses `~/experiments`. Missing experiments directories are allowed and created only when needed by `new`.
+`experiments_dir` accepts an absolute path or a path starting with `~/` (expanded using your home directory). Existing symlinks are resolved before subsequent `..` components, so configured paths retain their filesystem meaning. Other relative paths, empty values, non-string values, malformed TOML, and paths whose existing components are not usable directories produce errors rather than falling back. Missing configuration or an omitted key uses `~/experiments`. Missing experiments directories are allowed and created only when needed by `new`.
 
 The registry and its lock live under `$XDG_DATA_HOME/hatch/`, defaulting to `~/.local/share/hatch/`. XDG homes must be absolute; unset, empty, or relative values use their respective defaults. XDG values are not shell-expanded by Hatch. Different data homes have independent registries; changing the data home does not copy or discover old records.
 
-Changing `experiments_dir` affects only subsequently created projects. Existing projects and interrupted creations retain their stored absolute locations; no files are moved. Inspection still reconciles pending operations in an existing registry, even after configuration changes. Invalid configuration fails before accessing storage; help remains available.
+Changing `experiments_dir` affects only subsequently created projects. Existing projects and interrupted creations retain their stored absolute locations; no files are moved. Tracked locations, including missing locations, remain reserved: creation and promotion reject paths equal to, inside, or containing another tracked project, including symlink aliases. Promotion and removal also reject existing overlapping tracked locations before moving files, so an operation cannot indirectly move or trash another project. Inspection still reconciles pending operations in an existing registry, even after configuration changes. Invalid configuration fails before accessing storage; help remains available.
 
 Hatch never creates the configuration file or configuration directories. Help and inspection against an absent registry do not create data or experiments directories.
 

@@ -100,6 +100,9 @@ func (s *store) remove(name string, force bool) error {
 	if err := guardUnpromoted(p); err != nil {
 		return err
 	}
+	if err := s.guardIndependentLocation(p.Location, name); err != nil {
+		return err
+	}
 	identity, err := directoryIdentity(p.Location)
 	missing := errors.Is(err, os.ErrNotExist)
 	if err != nil && !missing {
