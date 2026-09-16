@@ -16,7 +16,32 @@ No templates or scaffolding—just an empty directory and a record of your proje
 
 ## Install
 
-Build from source with [Go 1.24 or newer](https://go.dev/dl/):
+### From GitHub Releases
+
+Download the ZIP for your operating system and architecture from [GitHub Releases](https://github.com/xenoninja/hatch/releases): `darwin` for macOS or `linux` for Linux, and `arm64` or `amd64` for your CPU. No Go installation is needed.
+
+Extract the archive, then run these commands from the extracted directory:
+
+```sh
+mkdir -p ~/.local/bin
+install -m 0755 hatch ~/.local/bin/hatch
+```
+
+Make sure `~/.local/bin` is on your `PATH`.
+
+### With go install
+
+With [Go 1.24 or newer](https://go.dev/dl/):
+
+```sh
+go install github.com/xenoninja/hatch@latest
+```
+
+Make sure `$(go env GOPATH)/bin` is on your `PATH` (or `GOBIN` if you've set it).
+
+### Build from source
+
+With [Go 1.24 or newer](https://go.dev/dl/):
 
 ```sh
 git clone https://github.com/xenoninja/hatch.git
