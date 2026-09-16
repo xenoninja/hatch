@@ -19,6 +19,7 @@ Commands:
   hatch new <name>                    Create an empty project folder
   hatch list                          List projects, newest first
   hatch info <name>                   Show a project's details and location
+  hatch path <name>                   Print only the project's absolute path
   hatch status <name> <status>        Update progress without changing files
   hatch promote <name> <target-path>  Move a project out of experiments
   hatch remove <name> [--force]       Move to trash and stop tracking
@@ -37,6 +38,9 @@ Statuses:
   Switch freely between these. Promoted projects stay listed, but cannot
   be changed or removed through Hatch.
 
+Path lookup fails with an error on stderr and no stdout if the name is
+unknown, the location is unavailable, or recovery is uncertain.
+
 More details: https://github.com/xenoninja/hatch/blob/main/docs/reference.md
 `
 
@@ -46,7 +50,7 @@ func Execute(args []string) error {
 		fmt.Print(help)
 		return nil
 	}
-	if len(args) == 2 && (args[0] == "new" || args[0] == "info" || args[0] == "list" || args[0] == "status" || args[0] == "promote" || args[0] == "remove") && (args[1] == "--help" || args[1] == "-h") {
+	if len(args) == 2 && (args[0] == "new" || args[0] == "info" || args[0] == "path" || args[0] == "list" || args[0] == "status" || args[0] == "promote" || args[0] == "remove") && (args[1] == "--help" || args[1] == "-h") {
 		fmt.Print(help)
 		return nil
 	}
@@ -64,8 +68,8 @@ func Execute(args []string) error {
 		}
 	}
 	removing := len(args) == 2 && args[0] == "remove"
-	if !listing && !changingStatus && !promoting && !removing && (len(args) != 2 || (args[0] != "new" && args[0] != "info")) {
-		return fmt.Errorf("expected new <name>, info <name>, list, status <name> <status>, promote <name> <target-path>, or remove <name> [--force]; use hatch --help")
+	if !listing && !changingStatus && !promoting && !removing && (len(args) != 2 || (args[0] != "new" && args[0] != "info" && args[0] != "path")) {
+		return fmt.Errorf("expected new <name>, info <name>, path <name>, list, status <name> <status>, promote <name> <target-path>, or remove <name> [--force]; use hatch --help")
 	}
 	var name string
 	if !listing {
@@ -122,6 +126,13 @@ func Execute(args []string) error {
 		p, err = store.info(name)
 	}
 	if err != nil {
+		return err
+	}
+	if args[0] == "path" {
+		if info, err := os.Stat(p.Location); err != nil || !info.IsDir() {
+			return fmt.Errorf("project location unavailable or not a directory: %s", p.Location)
+		}
+		_, err := fmt.Fprintln(os.Stdout, p.Location)
 		return err
 	}
 	fmt.Printf("Name: %s\nCreated: %s\nStatus: %s\nLocation: %s\n", p.Name, p.Date, p.Status, p.Location)

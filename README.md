@@ -89,9 +89,12 @@ Names use lowercase letters or digits separated by single hyphens, such as `tiny
 | `hatch new <name>` | Create an empty, dated experiment directory. |
 | `hatch list` | List all tracked projects, newest first. |
 | `hatch info <name>` | Show a project's creation date, status, and location. |
+| `hatch path <name>` | Print only the current absolute directory path, including after promotion. |
 | `hatch status <name> <status>` | Mark a project `active`, `completed`, or `abandoned`. |
 | `hatch promote <name> <target-path>` | Move a project to an exact destination outside experiments. |
 | `hatch remove <name>` | Move a project to trash and stop tracking it. |
+
+`hatch path <name>` prints the unquoted path followed by a newline. Invalid or unknown names, missing or non-directory locations, and uncertain recovery fail with a nonzero exit status, a diagnostic on stderr, and no stdout. See the [path lookup reference](docs/reference.md#path-lookup).
 
 Use `hatch --help` or `hatch <command> --help` for more options.
 

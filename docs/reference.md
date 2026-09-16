@@ -39,6 +39,14 @@ project-alpha  2026-09-14  active
 
 Rows use recorded creation order, newest first—not alphabetical or calendar-date order. For creations on the same date, the later registry sequence comes first; the unique sequence makes ordering deterministic even if the clock changes. No folders are scanned or imported, and no records are filtered by status or location availability. Missing or non-directory locations produce warnings on stderr with their stored paths; records and lifecycle statuses are unchanged. An absent or empty registry prints `No experimental projects tracked.` and exits successfully without initializing storage. Existing pending operations still undergo the shared recovery rules below.
 
+## Path lookup
+
+`hatch path <name>` requires exactly one project name and prints only its stored absolute location, unquoted, followed by one newline. Spaces are preserved. Lookup uses the exact name—not a prefix, case-insensitive match, or dated directory name. Promoted projects return their new location under the same name; changing `experiments_dir` does not redirect existing projects.
+
+The location must exist and be a directory. Invalid or unknown names, incorrect argument counts, unavailable or non-directory locations, configuration/storage errors, and uncertain recovery fail with a diagnostic on stderr, nonzero exit status, and no stdout. Missing locations are not repaired and their records are not removed; use `hatch info <name>` to inspect their recorded locations.
+
+Lookup runs the shared registry reconciliation before inspecting the project, completing verifiable interrupted operations and refusing ambiguous ones. An absent registry reports an unknown name without initializing storage. `hatch path --help` shows the shared help without accessing storage.
+
 ## Lifecycle status
 
 `hatch status <name> <status>` reclassifies an existing experimental project and prints its persisted information:
@@ -117,7 +125,7 @@ On a subsequent invocation:
 - Intent with no destination is cleared; creation can be retried.
 - A durably identified, unchanged directory completes registration with the original date.
 - A committed project remains tracked, even if its files later disappear.
-- An existing destination without recorded ownership, a changed directory identity, or a missing previously identified directory is uncertain. Hatch preserves files and pending evidence, reports the path, and blocks operations requiring recovery. This includes `info`, `list`, and `status`; help remains available.
+- An existing destination without recorded ownership, a changed directory identity, or a missing previously identified directory is uncertain. Hatch preserves files and pending evidence, reports the path, and blocks operations requiring recovery. This includes `info`, `path`, `list`, and `status`; help remains available.
 
 In particular, interruption between making the directory and recording its identity deliberately requires manual investigation—even if the directory is empty. Hatch never guesses ownership or deletes files during recovery. There is no automatic repair command in this release. Preserve the reported path and the registry before investigating; deleting the registry or pending evidence is not a safe generic repair.
 
@@ -131,7 +139,7 @@ On the next registry command, even with changed configuration:
 
 - The original identified source exists and the destination is absent: clear the unexecuted intent, retaining the original status/location. Promotion can be retried.
 - The source is absent and the destination has the recorded directory identity: sync the parent directories and complete promotion.
-- Both paths exist, both are missing, either identity changed, or a path cannot be inspected reliably: preserve files and pending evidence, report both paths, and block registry commands (`new`, `info`, `list`, `status`, and `promote`). Help remains available.
+- Both paths exist, both are missing, either identity changed, or a path cannot be inspected reliably: preserve files and pending evidence, report both paths, and block registry commands (`new`, `info`, `path`, `list`, `status`, and `promote`). Help remains available.
 
 As with creation recovery, ambiguous states require manual investigation; do not delete registry evidence as a generic repair. The shared lock coordinates Hatch processes using the same registry, not unrelated filesystem edits or independent data homes. Exclusive rename also prevents a destination that appears at move time from being overwritten.
 
