@@ -1,4 +1,4 @@
-package main
+package hatch
 
 import (
 	"os"
@@ -16,7 +16,7 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	binary = filepath.Join(dir, "hatch")
-	cmd := exec.Command("go", "build", "-tags=hatchtest", "-o", binary, ".")
+	cmd := exec.Command("go", "build", "-tags=hatchtest", "-o", binary, "../..")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		os.RemoveAll(dir)
 		panic(string(out))

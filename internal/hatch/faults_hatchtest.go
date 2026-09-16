@@ -1,6 +1,6 @@
 //go:build hatchtest
 
-package main
+package hatch
 
 import (
 	"os"

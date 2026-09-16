@@ -1,4 +1,4 @@
-package main
+package hatch
 
 import (
 	"crypto/rand"
