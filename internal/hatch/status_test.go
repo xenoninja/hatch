@@ -130,7 +130,7 @@ func TestInterruptedStatus(t *testing.T) {
 func TestStatusHelp(t *testing.T) {
 	home := t.TempDir()
 	for _, args := range [][]string{{"--help"}, {"status", "--help"}, {"status", "-h"}} {
-		contains(t, run(t, home, true, nil, args...), "status <name> <status>", "active", "completed", "abandoned", "promoted", "terminal", "promotion")
+		contains(t, run(t, home, true, nil, args...), "status <name> <status>", "active", "completed", "abandoned", "Promoted projects stay listed, but cannot", "be changed or removed through Hatch")
 	}
 	entries, err := os.ReadDir(home)
 	if err != nil || len(entries) != 0 {

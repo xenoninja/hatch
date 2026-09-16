@@ -13,53 +13,31 @@ var validName = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 var now = time.Now
 var interrupt = func(string) {}
 
-const help = `Hatch manages experimental projects.
+const help = `Hatch — a home for your next experiment.
 
-Usage:
-  hatch new <name>              Create an active experimental project
-  hatch info <name>             Show persisted project information
-  hatch list                    List name, creation date, and status, newest first
-  hatch status <name> <status>  Reclassify without moving or changing files
-  hatch promote <name> <target-path>  Move to an exact external destination
-  hatch remove <name> [--force]  Trash files and end tracking
-  hatch help                   Show this help
+Commands:
+  hatch new <name>                    Create an empty project folder
+  hatch list                         List projects, newest first
+  hatch info <name>                   Show a project's details and location
+  hatch status <name> <status>        Update progress without changing files
+  hatch promote <name> <target-path>  Move a project out of experiments
+  hatch remove <name> [--force]       Move to trash and stop tracking
+  hatch help                         Show this help
 
-Statuses: active (ongoing), completed (finished), abandoned (set aside).
-Switch freely among these statuses; repeating the current status succeeds.
-The promoted status is terminal and can only be set through promotion;
-it cannot be assigned or changed with status.
-Status preserves name, creation date, location, contents, and list order.
-Promote accepts active, completed, or abandoned projects and retains identity.
-Target-path is the exact final location (relative to the working directory or
-absolute), not a containing directory. Its parent must exist and the target
-must be absent. Symlink aliases are resolved; the destination must be outside
-both the current experiments directory and the source project.
-Promotion never merges, overwrites, creates parents, or copies across filesystems.
-Cross-filesystem moves are unsupported; use a destination on the same filesystem.
-Interrupted promotions recover on the next registry command; ambiguous states
-preserve files and evidence, report both paths, and block mutations.
-Remove rejects promoted projects, even when their files are missing.
-Missing files allow record-only removal. Both forms require interactive consent
-or --force (confirmation only); force never bypasses lifecycle or safety checks.
-Removal uses native macOS trash or Linux freedesktop home trash, never permanent
-deletion. Linux requires a safe home trash on the source filesystem; per-mount
-trash and cross-filesystem copy/delete fallback are unsupported.
-Trash failures retain tracking. Successful removal releases the name, but new
-still refuses an existing dated destination. No restore command is provided.
-Interrupted removals recover when evidence proves the outcome; ambiguous states
-retain tracking and pending evidence and block registry commands.
+Examples:
+  hatch new tiny-search
+  hatch status tiny-search completed
+  hatch promote tiny-search ~/work/tiny-search
 
-Names: lowercase ASCII letters or digits separated by single hyphens.
-Projects: ~/experiments/YYYY-MM-DD-<name> by default.
-Config: $XDG_CONFIG_HOME/hatch/config.toml (default ~/.config/hatch/config.toml).
-  experiments_dir = "~/experiments" (absolute path or leading ~/).
-Registry: $XDG_DATA_HOME/hatch/hatch.db (default ~/.local/share/hatch/hatch.db).
-Empty or relative XDG homes use defaults. Missing config uses defaults;
-invalid config is an error. Changes affect new projects only; no files move.
-List uses recorded creation order (latest first, including same-date ties).
-Unavailable locations produce warnings; records and statuses are preserved.
-An empty list succeeds with "No experimental projects tracked.".
-Storage is created lazily; help and fresh info/list do not initialize it.
+Statuses:
+  active      In progress (default for new projects)
+  completed   Finished
+  abandoned   Set aside
+
+  Switch freely between these. Promoted projects stay listed, but cannot
+  be changed or removed through Hatch.
+
+More details: https://github.com/xenoninja/hatch/blob/main/docs/reference.md
 `
 
 // Execute runs a Hatch command with the given command-line arguments.

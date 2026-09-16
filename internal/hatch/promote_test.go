@@ -65,7 +65,7 @@ func TestPromotionDoesNotReuseTrackedLocation(t *testing.T) {
 
 func TestPromotionHelpAndUsage(t *testing.T) {
 	home := t.TempDir()
-	contains(t, run(t, home, true, nil, "promote", "--help"), "promote <name> <target-path>", "exact final location", "Cross-filesystem")
+	contains(t, run(t, home, true, nil, "promote", "--help"), "promote <name> <target-path>", "Move a project out of experiments")
 	for _, args := range [][]string{{"promote"}, {"promote", "example"}, {"promote", "example", "target", "extra"}, {"promote", "Upper", "target"}, {"promote", "unknown", "target"}} {
 		run(t, home, false, nil, args...)
 	}

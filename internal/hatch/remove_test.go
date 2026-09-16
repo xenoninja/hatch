@@ -10,7 +10,7 @@ import (
 
 func TestRemoveHelpAndUsage(t *testing.T) {
 	home := t.TempDir()
-	contains(t, run(t, home, true, nil, "remove", "--help"), "remove <name> [--force]", "record-only", "confirmation only", "Linux")
+	contains(t, run(t, home, true, nil, "remove", "--help"), "remove <name> [--force]", "Move to trash and stop tracking")
 	for _, args := range [][]string{{"remove"}, {"remove", "example", "--unknown"}, {"remove", "example", "--force", "extra"}, {"remove", "Upper"}} {
 		run(t, home, false, nil, args...)
 	}
