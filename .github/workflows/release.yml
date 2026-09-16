@@ -1,0 +1,83 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Select version
+        shell: bash
+        run: echo "VERSION=$GITHUB_REF_NAME" >> "$GITHUB_ENV"
+      - run: go vet ./...
+      - name: Package all targets and check reproducibility
+        run: |
+          go run ./cmd/package -version "$VERSION" -out dist
+          go run ./cmd/package -version "$VERSION" -out repeated
+          diff dist/SHA256SUMS repeated/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: dist/*
+          if-no-files-found: error
+
+  native:
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: linux_amd64
+          - runner: macos-14
+            target: darwin_arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@v4
+        with:
+          name: packages
+          path: dist
+      - name: Test and verify standalone build
+        shell: bash
+        run: |
+          go test -count=1 ./...
+          CGO_ENABLED=0 go build -o "$RUNNER_TEMP/hatch" .
+          "$RUNNER_TEMP/hatch" --help >/dev/null
+      - name: Extract and verify package
+        shell: bash
+        run: |
+          archive=(dist/*_${{ matrix.target }}.zip)
+          test "${#archive[@]}" -eq 1
+          mkdir packaged
+          unzip -q "${archive[0]}" -d packaged
+          chmod +x packaged/hatch
+          packaged/hatch --help >/dev/null
+
+  release:
+    needs: [package, native]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: packages
+          path: dist
+      - name: Publish draft release for review
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: gh release create "$RELEASE_TAG" dist/* --verify-tag --draft --title "$RELEASE_TAG" --generate-notes
