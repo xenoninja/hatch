@@ -17,12 +17,12 @@ const help = `Hatch — a home for your next experiment.
 
 Commands:
   hatch new <name>                    Create an empty project folder
-  hatch list                         List projects, newest first
+  hatch list                          List projects, newest first
   hatch info <name>                   Show a project's details and location
   hatch status <name> <status>        Update progress without changing files
   hatch promote <name> <target-path>  Move a project out of experiments
   hatch remove <name> [--force]       Move to trash and stop tracking
-  hatch help                         Show this help
+  hatch help                          Show this help
 
 Examples:
   hatch new tiny-search
