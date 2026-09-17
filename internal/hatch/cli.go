@@ -21,7 +21,7 @@ Commands:
   hatch info <name>                   Show a project's details and location
   hatch path <name>                   Print only the project's absolute path
   hatch cd <name>                     Enter a project (requires shell integration)
-  hatch shell-init <bash|zsh|fish>      Print shell initialization code
+  hatch shell-init <bash|zsh|fish>    Print shell initialization code
   hatch status <name> <status>        Update progress without changing files
   hatch promote <name> <target-path>  Move a project out of experiments
   hatch remove <name> [--force]       Move to trash and stop tracking
