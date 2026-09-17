@@ -47,6 +47,40 @@ The location must exist and be a directory. Invalid or unknown names, incorrect 
 
 Lookup runs the shared registry reconciliation before inspecting the project, completing verifiable interrupted operations and refusing ambiguous ones. An absent registry reports an unknown name without initializing storage. `hatch path --help` shows the shared help without accessing storage.
 
+## Shell integration and navigation
+
+`hatch shell-init <bash|zsh|fish>` prints sourceable code for the explicitly named
+shell. Unsupported shells and missing or extra arguments fail with a diagnostic
+and nonzero status. `--help` and `-h` print guidance instead of initialization code.
+Generation and help do not read configuration, require a registry, or create one.
+
+Add the appropriate line yourself:
+
+- bash, in `~/.bashrc`: `eval "$(hatch shell-init bash)"`
+- zsh, in `~/.zshrc`: `eval "$(hatch shell-init zsh)"`
+- fish, in `~/.config/fish/config.fish`: `hatch shell-init fish | source`
+
+Reload that file or start a new shell. Bash login users should source `~/.bashrc`
+from `~/.bash_profile`. The Hatch executable must remain on `PATH`.
+Hatch never edits shell configuration or detects a shell automatically.
+
+The generated `hatch` function intercepts `hatch cd <name>`. It uses
+`hatch path <name>` as its sole lookup and invokes the shell's built-in directory
+change with one literal destination. It enters active, completed, abandoned, and
+promoted projects using their stored locations, regardless of later configuration
+changes. Spaces and shell metacharacters in paths are preserved. Successful
+navigation is silent and returns zero. Lookup or directory-change failures report
+a diagnostic, return nonzero, and leave the current directory unchanged; recovery
+uncertainty is never bypassed.
+
+Exactly one explicit name is required; missing or extra arguments show usage and
+fail. `hatch cd --help` and `hatch cd -h` show guidance without lookup or navigation.
+Direct executable navigation attempts with a valid name fail with setup guidance:
+an executable cannot change its parent shell's directory. This guidance does not
+access or initialize storage. `hatch path` continues to print a path without
+changing directories. Every command other than `cd` is forwarded directly to the
+executable, preserving argument boundaries, stdout, stderr, and exit status.
+
 ## Lifecycle status
 
 `hatch status <name> <status>` reclassifies an existing experimental project and prints its persisted information:
@@ -144,6 +178,10 @@ On the next registry command, even with changed configuration:
 As with creation recovery, ambiguous states require manual investigation; do not delete registry evidence as a generic repair. The shared lock coordinates Hatch processes using the same registry, not unrelated filesystem edits or independent data homes. Exclusive rename also prevents a destination that appears at move time from being overwritten.
 
 ## Tests
+
+Install bash, zsh, and fish before running the suite; shell integration tests require
+all three and fail if one is unavailable. Tests run generated integration in real
+shell processes and observe directory changes, failure behavior, and forwarding.
 
 ```sh
 go vet ./...
