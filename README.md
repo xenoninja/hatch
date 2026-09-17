@@ -90,6 +90,8 @@ Names use lowercase letters or digits separated by single hyphens, such as `tiny
 | `hatch list` | List all tracked projects, newest first. |
 | `hatch info <name>` | Show a project's creation date, status, and location. |
 | `hatch path <name>` | Print only the current absolute directory path, including after promotion. |
+| `hatch cd <name>` | Enter the project in your current shell (requires setup below). |
+| `hatch shell-init <bash\|zsh\|fish>` | Print optional shell initialization code. |
 | `hatch status <name> <status>` | Mark a project `active`, `completed`, or `abandoned`. |
 | `hatch promote <name> <target-path>` | Move a project to an exact destination outside experiments. |
 | `hatch remove <name>` | Move a project to trash and stop tracking it. |
@@ -99,6 +101,30 @@ Names use lowercase letters or digits separated by single hyphens, such as `tiny
 Use `hatch --help` or `hatch <command> --help` for more options.
 
 Projects start as **active**. You can switch freely among active, completed, and abandoned without touching their files. Promotion sets the terminal status **promoted**: the project stays listed, but Hatch no longer allows status changes, promotion, or removal for it.
+
+## Shell navigation
+
+Add the line for your shell to its startup file, then reload the file or open a new terminal:
+
+| Shell | Startup file | Line to add |
+| --- | --- | --- |
+| bash | `~/.bashrc` | `eval "$(hatch shell-init bash)"` |
+| zsh | `~/.zshrc` | `eval "$(hatch shell-init zsh)"` |
+| fish | `~/.config/fish/config.fish` | `hatch shell-init fish \| source` |
+
+For bash login shells, ensure your `~/.bash_profile` sources `~/.bashrc`.
+Hatch does not edit these files. Keep the executable on your `PATH`.
+
+Run `hatch cd tiny-search` to enter its recorded directory, even after promotion.
+Navigation requires one exact tracked name and works for every project status.
+Success is silent; invalid names, unavailable locations, directory-change failures,
+and uncertain recovery report errors and leave your working directory unchanged.
+`hatch cd --help` (or `-h`) explains setup without navigating. Without integration,
+`hatch cd` with a valid name prints setup guidance and fails.
+
+Use `hatch path tiny-search` when you only want to print the path.
+All other commands pass through to the executable with their arguments, output,
+and exit status preserved.
 
 ## Configuration
 

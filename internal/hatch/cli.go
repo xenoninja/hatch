@@ -20,6 +20,8 @@ Commands:
   hatch list                          List projects, newest first
   hatch info <name>                   Show a project's details and location
   hatch path <name>                   Print only the project's absolute path
+  hatch cd <name>                     Enter a project (requires shell integration)
+  hatch shell-init <bash|zsh|fish>      Print shell initialization code
   hatch status <name> <status>        Update progress without changing files
   hatch promote <name> <target-path>  Move a project out of experiments
   hatch remove <name> [--force]       Move to trash and stop tracking
@@ -53,6 +55,9 @@ func Execute(args []string) error {
 	if len(args) == 2 && (args[0] == "new" || args[0] == "info" || args[0] == "path" || args[0] == "list" || args[0] == "status" || args[0] == "promote" || args[0] == "remove") && (args[1] == "--help" || args[1] == "-h") {
 		fmt.Print(help)
 		return nil
+	}
+	if args[0] == "cd" || args[0] == "shell-init" {
+		return shellCommand(args)
 	}
 	listing := len(args) == 1 && args[0] == "list"
 	changingStatus := len(args) == 3 && args[0] == "status"
