@@ -64,11 +64,13 @@ hatch new tiny-search
 hatch list
 hatch info tiny-search
 
+# Enter the folder and do stuff
+hatch cd tiny-search
+
 # Finish the experiment, keeping its files
 hatch status tiny-search completed
 
 # Ready for something bigger? Move it out of experiments
-mkdir -p ~/work
 hatch promote tiny-search ~/work/tiny-search
 ```
 
@@ -112,19 +114,6 @@ Add the line for your shell to its startup file, then reload the file or open a 
 | zsh | `~/.zshrc` | `eval "$(hatch shell-init zsh)"` |
 | fish | `~/.config/fish/config.fish` | `hatch shell-init fish \| source` |
 
-For bash login shells, ensure your `~/.bash_profile` sources `~/.bashrc`.
-Hatch does not edit these files. Keep the executable on your `PATH`.
-
-Run `hatch cd tiny-search` to enter its recorded directory, even after promotion.
-Navigation requires one exact tracked name and works for every project status.
-Success is silent; invalid names, unavailable locations, directory-change failures,
-and uncertain recovery report errors and leave your working directory unchanged.
-`hatch cd --help` (or `-h`) explains setup without navigating. Without integration,
-`hatch cd` with a valid name prints setup guidance and fails.
-
-Use `hatch path tiny-search` when you only want to print the path.
-All other commands pass through to the executable with their arguments, output,
-and exit status preserved.
 
 ## Configuration
 
