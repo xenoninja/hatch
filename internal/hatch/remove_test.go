@@ -289,7 +289,14 @@ func TestRemoveFiles(t *testing.T) {
 	t.Cleanup(func() {
 		actual, err := directoryIdentity(target)
 		if err == nil && actual == identity {
-			if err := os.RemoveAll(target); err != nil {
+			// RemoveAll opens the parent, which macOS can deny for .Trash.
+			// Move only our identity-checked fixture back before deleting it.
+			cleanup := filepath.Join(home, "trash-cleanup")
+			if err := renameExclusive(target, cleanup); err != nil {
+				t.Error(err)
+				return
+			}
+			if err := os.RemoveAll(cleanup); err != nil {
 				t.Error(err)
 			}
 		} else {

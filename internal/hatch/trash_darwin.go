@@ -7,6 +7,13 @@ import (
 	"strings"
 )
 
+// Foundation owns the destination-side trash operation. macOS can allow the
+// native move and inspection of its receipt while denying open of the trash
+// parent itself. Do not require that extra access to complete or recover removal.
+func syncTrashParents(source, _ string) error {
+	return syncDirectory(filepath.Dir(source))
+}
+
 // Foundation selects the native per-volume trash and a collision-free name.
 // AppleScriptObjC supports Foundation's output parameters without cgo or Finder
 // automation. A failed call may still have moved files: reconcile evidence.

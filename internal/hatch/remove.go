@@ -83,7 +83,7 @@ func (s *store) reconcileRemoval() error {
 			if receiptErr := syncTrashInfo(target, trashInfo); receiptErr != nil {
 				return fmt.Errorf("%s: %w", uncertainRemoval(name, source, target, trashInfo), receiptErr)
 			}
-			if err := syncMoveParents(source, target); err != nil {
+			if err := syncTrashParents(source, target); err != nil {
 				return err
 			}
 			return s.completeRemoval(name, source)
