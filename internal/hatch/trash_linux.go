@@ -11,6 +11,10 @@ import (
 	"strings"
 )
 
+func syncTrashParents(source, target string) error {
+	return syncMoveParents(source, target)
+}
+
 // Linux uses the freedesktop home trash, and never copies across filesystems.
 // Per-mount trash discovery is intentionally unsupported: fail rather than
 // placing files in a trash that a desktop cannot safely restore.
