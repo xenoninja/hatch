@@ -40,7 +40,7 @@ func build(version, out string) error {
 	for _, system := range []string{"linux", "darwin"} {
 		for _, arch := range []string{"amd64", "arm64"} {
 			binary := filepath.Join(temp, "hatch")
-			cmd := exec.Command("go", "build", "-trimpath", "-buildvcs=false", "-ldflags=-s -w -buildid=", "-o", binary, ".")
+			cmd := exec.Command("go", "build", "-trimpath", "-buildvcs=false", "-ldflags=-s -w -buildid= -X github.com/xenoninja/hatch/internal/hatch.releaseVersion="+version, "-o", binary, ".")
 			cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+system, "GOARCH="+arch,
 				"GOAMD64=v1", "GOARM64=v8.0", "GOFLAGS=", "GOEXPERIMENT=")
 			if output, err := cmd.CombinedOutput(); err != nil {

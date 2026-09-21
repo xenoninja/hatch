@@ -70,6 +70,7 @@ jobs:
           unzip -q "${archive[0]}" -d packaged
           chmod +x packaged/hatch
           packaged/hatch --help >/dev/null
+          test "$(packaged/hatch --version)" = "hatch $GITHUB_REF_NAME"
 
   release:
     needs: [package, native]

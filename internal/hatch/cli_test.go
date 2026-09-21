@@ -69,3 +69,40 @@ func TestCreateAndInspect(t *testing.T) {
 		t.Fatalf("project contents: %v %v", entries, err)
 	}
 }
+
+func TestCommandArguments(t *testing.T) {
+	home := t.TempDir()
+	for _, tc := range []struct {
+		command string
+		args    []string
+	}{
+		{"new", []string{"example"}},
+		{"info", []string{"example"}},
+		{"path", []string{"example"}},
+		{"list", nil},
+		{"status", []string{"example", "completed"}},
+		{"promote", []string{"example", "/destination"}},
+		{"remove", []string{"example"}},
+		{"help", nil},
+		{"--help", nil},
+		{"-h", nil},
+		{"version", nil},
+		{"--version", nil},
+	} {
+		t.Run(tc.command, func(t *testing.T) {
+			args := append([]string{tc.command}, tc.args...)
+			assertPath(t, home, nil, "", "expected hatch "+tc.command, append(args, "extra")...)
+			if len(tc.args) > 0 {
+				assertPath(t, home, nil, "", "expected hatch "+tc.command, args[:len(args)-1]...)
+			}
+		})
+	}
+	// Help flags combined with --force are invalid names, not help requests.
+	for _, args := range [][]string{{"remove", "--force", "--help"}, {"remove", "-h", "--force"}} {
+		assertPath(t, home, nil, "", "invalid name", args...)
+	}
+	entries, err := os.ReadDir(home)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("invalid arguments initialized home: %v %v", entries, err)
+	}
+}

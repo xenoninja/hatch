@@ -39,6 +39,19 @@ project-alpha  2026-09-14  active
 
 Rows use recorded creation order, newest first—not alphabetical or calendar-date order. For creations on the same date, the later registry sequence comes first; the unique sequence makes ordering deterministic even if the clock changes. No folders are scanned or imported, and no records are filtered by status or location availability. Missing or non-directory locations produce warnings on stderr with their stored paths; records and lifecycle statuses are unchanged. An absent or empty registry prints `No experimental projects tracked.` and exits successfully without initializing storage. Existing pending operations still undergo the shared recovery rules below.
 
+## Help and version
+
+`hatch`, `hatch help`, `hatch --help`, and `hatch -h` print identical full help with a `hatch <version>` header. `hatch --version` and `hatch version` print only `hatch <version>` followed by a newline. These commands write to stdout, exit with status 0, and do not read configuration or access project storage.
+
+Release ZIPs embed their release tag, such as `v1.2.3`. Builds installed with `go install github.com/xenoninja/hatch@<version>` use Go's module version metadata. Unreleased source builds report `hatch dev`.
+
+Unknown commands exit with status 1, leave stdout empty, and print a specific error and help hint to stderr:
+
+```text
+hatch: unknown command "ljldsjf"
+Run 'hatch help' for available commands and examples.
+```
+
 ## Path lookup
 
 `hatch path <name>` requires exactly one project name and prints only its stored absolute location, unquoted, followed by one newline. Spaces are preserved. Lookup uses the exact name—not a prefix, case-insensitive match, or dated directory name. Promoted projects return their new location under the same name; changing `experiments_dir` does not redirect existing projects.

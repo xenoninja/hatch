@@ -26,6 +26,7 @@ Commands:
   hatch promote <name> <target-path>  Move a project out of experiments
   hatch remove <name> [--force]       Move to trash and stop tracking
   hatch help                          Show this help
+  hatch --version                     Show version (also: hatch version)
 
 Examples:
   hatch new tiny-search
@@ -48,33 +49,55 @@ More details: https://github.com/xenoninja/hatch/blob/main/docs/reference.md
 
 // Execute runs a Hatch command with the given command-line arguments.
 func Execute(args []string) error {
-	if len(args) == 0 || (len(args) == 1 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h")) {
-		fmt.Print(help)
-		return nil
+	if len(args) == 0 {
+		args = []string{"help"}
 	}
-	if len(args) == 2 && (args[0] == "new" || args[0] == "info" || args[0] == "path" || args[0] == "list" || args[0] == "status" || args[0] == "promote" || args[0] == "remove") && (args[1] == "--help" || args[1] == "-h") {
-		fmt.Print(help)
-		return nil
-	}
-	if args[0] == "cd" || args[0] == "shell-init" {
-		return shellCommand(args)
-	}
-	listing := len(args) == 1 && args[0] == "list"
-	changingStatus := len(args) == 3 && args[0] == "status"
-	promoting := len(args) == 3 && args[0] == "promote"
-	force := false
-	if args[0] == "remove" && len(args) == 3 {
-		if args[1] == "--force" {
-			args = []string{"remove", args[2]}
-			force = true
-		} else if args[2] == "--force" {
-			args = args[:2]
-			force = true
+	var usage string
+	var wantArgs int
+	var listing, changingStatus, promoting, removing, force bool
+	switch args[0] {
+	case "help", "--help", "-h":
+		if len(args) != 1 {
+			return fmt.Errorf("expected hatch %s; use hatch --help", args[0])
 		}
+		fmt.Printf("hatch %s\n\n%s", version(), help)
+		return nil
+	case "version", "--version":
+		if len(args) != 1 {
+			return fmt.Errorf("expected hatch %s; use hatch --help", args[0])
+		}
+		fmt.Printf("hatch %s\n", version())
+		return nil
+	case "cd", "shell-init":
+		return shellCommand(args)
+	case "new", "info", "path":
+		usage, wantArgs = args[0]+" <name>", 2
+	case "list":
+		usage, wantArgs, listing = "list", 1, true
+	case "status":
+		usage, wantArgs, changingStatus = "status <name> <status>", 3, true
+	case "promote":
+		usage, wantArgs, promoting = "promote <name> <target-path>", 3, true
+	case "remove":
+		usage, wantArgs, removing = "remove <name> [--force]", 2, true
+		if len(args) == 3 {
+			if args[1] == "--force" {
+				args = []string{"remove", args[2]}
+				force = true
+			} else if args[2] == "--force" {
+				args = args[:2]
+				force = true
+			}
+		}
+	default:
+		return fmt.Errorf("unknown command %q\nRun 'hatch help' for available commands and examples.", args[0])
 	}
-	removing := len(args) == 2 && args[0] == "remove"
-	if !listing && !changingStatus && !promoting && !removing && (len(args) != 2 || (args[0] != "new" && args[0] != "info" && args[0] != "path")) {
-		return fmt.Errorf("expected new <name>, info <name>, path <name>, list, status <name> <status>, promote <name> <target-path>, or remove <name> [--force]; use hatch --help")
+	if !force && len(args) == 2 && (args[1] == "--help" || args[1] == "-h") {
+		fmt.Printf("hatch %s\n\n%s", version(), help)
+		return nil
+	}
+	if len(args) != wantArgs {
+		return fmt.Errorf("expected hatch %s; use hatch %s --help", usage, args[0])
 	}
 	var name string
 	if !listing {
