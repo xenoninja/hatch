@@ -100,7 +100,7 @@ Names use lowercase letters or digits separated by single hyphens, such as `tiny
 
 `hatch path <name>` prints the unquoted path followed by a newline. Invalid or unknown names, missing or non-directory locations, and uncertain recovery fail with a nonzero exit status, a diagnostic on stderr, and no stdout. See the [path lookup reference](docs/reference.md#path-lookup).
 
-Use `hatch --help` or `hatch <command> --help` for more options.
+Run `hatch`, `hatch help`, `hatch --help`, or `hatch -h` for the same full help, including the installed version. Use `hatch <command> --help` for command guidance. `hatch --version` (or `hatch version`) prints only the version.
 
 Projects start as **active**. You can switch freely among active, completed, and abandoned without touching their files. Promotion sets the terminal status **promoted**: the project stays listed, but Hatch no longer allows status changes, promotion, or removal for it.
 

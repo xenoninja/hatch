@@ -26,6 +26,7 @@ Commands:
   hatch promote <name> <target-path>  Move a project out of experiments
   hatch remove <name> [--force]       Move to trash and stop tracking
   hatch help                          Show this help
+  hatch --version                     Show version (also: hatch version)
 
 Examples:
   hatch new tiny-search
@@ -49,12 +50,21 @@ More details: https://github.com/xenoninja/hatch/blob/main/docs/reference.md
 // Execute runs a Hatch command with the given command-line arguments.
 func Execute(args []string) error {
 	if len(args) == 0 || (len(args) == 1 && (args[0] == "help" || args[0] == "--help" || args[0] == "-h")) {
-		fmt.Print(help)
+		fmt.Printf("hatch %s\n\n%s", version(), help)
 		return nil
 	}
 	if len(args) == 2 && (args[0] == "new" || args[0] == "info" || args[0] == "path" || args[0] == "list" || args[0] == "status" || args[0] == "promote" || args[0] == "remove") && (args[1] == "--help" || args[1] == "-h") {
-		fmt.Print(help)
+		fmt.Printf("hatch %s\n\n%s", version(), help)
 		return nil
+	}
+	if len(args) == 1 && (args[0] == "--version" || args[0] == "version") {
+		fmt.Printf("hatch %s\n", version())
+		return nil
+	}
+	switch args[0] {
+	case "new", "info", "path", "list", "status", "promote", "remove", "cd", "shell-init", "help", "--help", "-h", "version", "--version":
+	default:
+		return fmt.Errorf("unknown command %q\nRun 'hatch help' for available commands and examples.", args[0])
 	}
 	if args[0] == "cd" || args[0] == "shell-init" {
 		return shellCommand(args)
