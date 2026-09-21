@@ -53,6 +53,11 @@ func TestHelpAndVersion(t *testing.T) {
 	for _, args := range [][]string{nil, {"help"}, {"--help"}, {"-h"}, {"path", "--help"}} {
 		assertPath(t, home, nil, "hatch dev\n\n"+help, "", args...)
 	}
+	for _, command := range []string{"new", "info", "path", "list", "status", "promote", "remove"} {
+		for _, flag := range []string{"--help", "-h"} {
+			assertPath(t, home, nil, "hatch dev\n\n"+help, "", command, flag)
+		}
+	}
 	for _, args := range [][]string{{"--version"}, {"version"}} {
 		assertPath(t, home, nil, "hatch dev\n", "", args...)
 	}
