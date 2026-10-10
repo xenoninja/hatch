@@ -10,6 +10,25 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
+// Resolve the same configured locations for commands and browser snapshots,
+// without opening or initializing storage.
+func storageDirectories() (root, experiments string, err error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", "", err
+	}
+	home, err = filepath.Abs(home)
+	if err != nil {
+		return "", "", err
+	}
+	experiments, err = experimentsDirectory(home)
+	if err != nil {
+		return "", "", err
+	}
+	root = filepath.Join(xdgHome("XDG_DATA_HOME", filepath.Join(home, ".local", "share")), "hatch")
+	return root, experiments, nil
+}
+
 func experimentsDirectory(home string) (string, error) {
 	path := filepath.Join(xdgHome("XDG_CONFIG_HOME", filepath.Join(home, ".config")), "hatch", "config.toml")
 	data, err := os.ReadFile(path)

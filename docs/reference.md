@@ -41,7 +41,7 @@ Rows use recorded creation order, newest first—not alphabetical or calendar-da
 
 ## Help and version
 
-`hatch`, `hatch help`, `hatch --help`, and `hatch -h` print identical full help with a `hatch <version>` header. `hatch --version` and `hatch version` print only `hatch <version>` followed by a newline. These commands write to stdout, exit with status 0, and do not read configuration or access project storage.
+`hatch help`, `hatch --help`, and `hatch -h` print identical full help with a `hatch <version>` header. `hatch --version` and `hatch version` print only `hatch <version>` followed by a newline. These commands write to stdout, exit with status 0, and do not read configuration or access project storage. Bare `hatch` opens the project browser through initialized shell integration, as described below.
 
 Release ZIPs embed their release tag, such as `v1.2.3`. Builds installed with `go install github.com/xenoninja/hatch@<version>` use Go's module version metadata. Unreleased source builds report `hatch dev`.
 
@@ -73,7 +73,8 @@ Add the appropriate line yourself:
 - zsh, in `~/.zshrc`: `eval "$(hatch shell-init zsh)"`
 - fish, in `~/.config/fish/config.fish`: `hatch shell-init fish | source`
 
-Reload that file or start a new shell. Bash login users should source `~/.bashrc`
+Reload that file or start a new shell, including after upgrading Hatch so the
+generated function receives the new bare-invocation behavior. Bash login users should source `~/.bashrc`
 from `~/.bash_profile`. The Hatch executable must remain on `PATH`.
 Hatch never edits shell configuration or detects a shell automatically.
 
@@ -91,8 +92,72 @@ fail. `hatch cd --help` and `hatch cd -h` show guidance without lookup or naviga
 Direct executable navigation attempts with a valid name fail with setup guidance:
 an executable cannot change its parent shell's directory. This guidance does not
 access or initialize storage. `hatch path` continues to print a path without
-changing directories. Every command other than `cd` is forwarded directly to the
+changing directories. Every command other than bare `hatch` and `cd` is forwarded directly to the
 executable, preserving argument boundaries, stdout, stderr, and exit status.
+
+### Project browser
+
+Plain `hatch` through the initialized function opens an embedded browser below
+the prompt. An empty query lists all tracked projects alphabetically by name, including
+active, completed, abandoned, and promoted projects. Rows show aligned columns
+for name, status, and creation date (`YYYY-MM-DD`),
+with an unavailable annotation for missing or non-directory locations. Long
+names are clipped to keep the metadata visible.
+The browser shows only the search field and up to ten result rows; longer lists
+scroll. Diagnostics appear when a selection is unavailable or has changed.
+
+Typing filters tracked names only; creation date, status, and location never
+contribute to a match. Input is literal text, not a regular expression or
+wildcard pattern.
+Matching ignores case and permits gaps between ordered characters (`MWA`
+matches `my-web-app`). Matched name characters are highlighted. Results rank
+exact names first, then prefixes, contiguous substrings, and gapped matches.
+Within gapped matches, fewer skipped characters between the first and last
+matched characters rank higher, using the tightest matching span in the name.
+Remaining ties prefer shorter names, then alphabetical order. There is no
+history or recency weighting.
+
+The first project is selected initially, after each query change, and after a
+refresh, resetting the scrolled view. Backspace edits the query; Ctrl-U clears it. Up/Down and
+Ctrl-P/Ctrl-N move without wrapping. Enter is always required, even with one
+match, and enters the selected stored
+location in the current shell. Esc or Ctrl-C cancels quietly with status zero and
+unchanged cwd. The browser clears and restores terminal settings on exit.
+With zero matches, Enter does nothing and the browser stays open for editing or
+cancellation. Searching does not change tracking or project files.
+Selecting an unavailable location explains the problem and keeps browsing;
+tracking and lifecycle status remain unchanged.
+
+Without integration, direct invocation on a terminal fails with setup guidance
+without accessing configuration or storage. Without terminal input and terminal
+diagnostic output, bare invocation fails promptly with nonzero status and pointers
+to `hatch help` and `hatch list`. Once these prerequisites are satisfied, an absent
+or empty registry prints `No experimental projects tracked.` and returns zero
+without initializing storage or changing cwd.
+
+Snapshots, refreshes, and selection checks run shared recovery under the registry
+lock, then release it; no lock is held while waiting for keyboard input, so other
+Hatch commands can finish while the browser is open. Results remain stable while
+browsing, without background polling or filesystem watching. Ctrl-R refreshes
+tracked projects, statuses, locations, and availability, retaining the query and
+applying the same filtering and ordering. Locations remain hidden.
+
+Enter checks the captured unique creation sequence, stored location, and current
+directory availability. A status-only update permits navigation when identity and
+location are unchanged. Removal, same-name replacement (even at the same location),
+or relocation refreshes results with an explanation and retains the query. Review
+the refreshed results and press Enter again before navigation. An unavailable
+location keeps the browser open with its diagnostic and leaves tracking and cwd
+unchanged. If refresh leaves no query matches, Enter does nothing; if the registry
+becomes empty, the browser clears, prints `No experimental projects tracked.`, and
+exits successfully without navigation. Uncertain recovery and operational errors
+restore the terminal, fail, and leave cwd unchanged.
+
+Browser rendering and diagnostics use the terminal on stderr; stdout carries only
+the selected literal location for the shell function. Spaces, shell metacharacters,
+and embedded or trailing newlines are preserved. Cancellation and empty registries
+never cause an empty-path directory change. The shell performs the final built-in
+`cd`; failures report an error, return nonzero, and leave cwd unchanged.
 
 ## Lifecycle status
 
@@ -195,6 +260,19 @@ As with creation recovery, ambiguous states require manual investigation; do not
 Install bash, zsh, and fish before running the suite; shell integration tests require
 all three and fail if one is unavailable. Tests run generated integration in real
 shell processes and observe directory changes, failure behavior, and forwarding.
+Browser tests attach those shells to a pseudo-terminal and drive actual keys.
+They check rendered screens with a terminal emulator, terminal settings, literal
+paths and actual cwd, cancellation, scrolling, unavailable locations, recovery,
+concurrent mutations, and registry-lock release. Refresh coverage keeps real Hatch
+commands running while the picker is open, checks Ctrl-R query preservation and
+ranking, updated status/location/availability, empty results, shared recovery, and
+terminal cleanup. Removal, same-name recreation at the same location, and promotion
+require a second Enter after selection revalidation; status-only updates navigate
+immediately. Refresh and cancellation leave cwd unchanged, and literal refreshed
+destinations are handed off through bash, zsh, and fish.
+Search coverage checks visible category, gap, length, and alphabetical ranking,
+case-insensitivity, matched-character highlighting, literal name-only matching,
+query editing and selection reset, zero matches, and explicit single-match confirmation.
 
 ```sh
 go vet ./...

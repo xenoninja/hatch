@@ -65,6 +65,7 @@ hatch list
 hatch info tiny-search
 
 # Enter the folder and do stuff
+hatch                    # Search and choose a project (requires shell setup)
 hatch cd tiny-search
 
 # Finish the experiment, keeping its files
@@ -88,6 +89,7 @@ Names use lowercase letters or digits separated by single hyphens, such as `tiny
 
 | Command | What it does |
 | --- | --- |
+| `hatch` | Search tracked project names and enter one in your current shell (requires setup below). |
 | `hatch new <name>` | Create an empty, dated experiment directory. |
 | `hatch list` | List all tracked projects, newest first. |
 | `hatch info <name>` | Show a project's creation date, status, and location. |
@@ -100,7 +102,7 @@ Names use lowercase letters or digits separated by single hyphens, such as `tiny
 
 `hatch path <name>` prints the unquoted path followed by a newline. Invalid or unknown names, missing or non-directory locations, and uncertain recovery fail with a nonzero exit status, a diagnostic on stderr, and no stdout. See the [path lookup reference](docs/reference.md#path-lookup).
 
-Run `hatch`, `hatch help`, `hatch --help`, or `hatch -h` for the same full help, including the installed version. Use `hatch <command> --help` for command guidance. `hatch --version` (or `hatch version`) prints only the version.
+Run `hatch help`, `hatch --help`, or `hatch -h` for the same full help, including the installed version. Use `hatch <command> --help` for command guidance. `hatch --version` (or `hatch version`) prints only the version.
 
 Projects start as **active**. You can switch freely among active, completed, and abandoned without touching their files. Promotion sets the terminal status **promoted**: the project stays listed, but Hatch no longer allows status changes, promotion, or removal for it.
 
@@ -113,6 +115,39 @@ Add the line for your shell to its startup file, then reload the file or open a 
 | bash | `~/.bashrc` | `eval "$(hatch shell-init bash)"` |
 | zsh | `~/.zshrc` | `eval "$(hatch shell-init zsh)"` |
 | fish | `~/.config/fish/config.fish` | `hatch shell-init fish \| source` |
+
+With integration loaded, plain `hatch` opens a searchable browser of all
+tracked projects, including promoted ones. Type to filter names: matching is
+literal, ignores case, and allows gaps (`MWA` matches `my-web-app`). Matched
+characters are highlighted. An empty query lists projects alphabetically;
+searches rank exact names, prefixes, contiguous substrings, then gapped matches.
+Gapped matches prefer fewer skipped characters; remaining ties prefer shorter
+names, then alphabetical order. Creation date, status, and location are not
+searched.
+
+Backspace edits the query and Ctrl-U clears it. Each query change selects the
+first result. Up/Down or Ctrl-P/Ctrl-N move the highlight, Enter enters the
+selected directory, and Esc or Ctrl-C cancels. Enter is required even for one
+match; with no matches it does nothing so you can edit or cancel. The browser
+shows only a search field and aligned result columns for name, status, and
+creation date (`YYYY-MM-DD`), with up to ten rows that scroll. Long names are
+clipped to keep the metadata visible. Missing or non-directory locations stay
+searchable as unavailable; selecting one explains the problem and keeps the
+browser open.
+
+Results stay stable while browsing. Ctrl-R refreshes projects, statuses, and
+availability while preserving your query and selecting the first match. Other
+Hatch commands can run while the browser waits for input. Enter rechecks the
+selected project's identity and location: removal, same-name recreation, or
+promotion refreshes results with an explanation and requires another Enter before
+navigation. A status-only change permits navigation. If refresh finds no query
+matches, keep editing or cancel; an empty registry exits successfully with
+`No experimental projects tracked.` and leaves your directory unchanged.
+
+After upgrading, reload your startup file or start a new shell to install the
+updated function. Direct executable invocation shows setup guidance.
+Noninteractive bare invocation fails promptly; use `hatch help` or `hatch list`
+in scripts. `hatch cd <name>` continues to enter a project by its exact name.
 
 
 ## Configuration

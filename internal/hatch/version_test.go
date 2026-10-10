@@ -50,7 +50,7 @@ func TestHelpAndVersion(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(config, "config.toml"), []byte("invalid = ["), 0600); err != nil {
 		t.Fatal(err)
 	}
-	for _, args := range [][]string{nil, {"help"}, {"--help"}, {"-h"}, {"path", "--help"}} {
+	for _, args := range [][]string{{"help"}, {"--help"}, {"-h"}, {"path", "--help"}} {
 		assertPath(t, home, nil, "hatch dev\n\n"+help, "", args...)
 	}
 	for _, command := range []string{"new", "info", "path", "list", "status", "promote", "remove"} {

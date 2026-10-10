@@ -2,7 +2,13 @@ package hatch
 
 import "fmt"
 
-const navigationHelp = `Usage: hatch cd <name>
+const navigationHelp = `Usage: hatch
+Browse all tracked projects alphabetically and enter one in the current shell.
+Requires shell integration and an interactive terminal. Up/Down or Ctrl-P/Ctrl-N
+move the selection; Enter enters it; Esc or Ctrl-C cancels without changing cwd.
+An unavailable location stays listed; selecting it explains the problem.
+
+Usage: hatch cd <name>
 Enter a tracked project's directory in the current shell, including after
 promotion. Requires exactly one name. Successful navigation is silent;
 lookup or directory-change errors leave the working directory unchanged.
@@ -14,6 +20,7 @@ Enable shell integration by adding the appropriate line to your startup file:
 
 Usage: hatch shell-init <bash|zsh|fish>
 Print initialization code for the named shell. Hatch never edits startup files.
+After upgrading, reload your startup file or start a new shell to update hatch.
 Use hatch path <name> to print a location without entering it.
 `
 
@@ -46,6 +53,15 @@ func shellCommand(args []string) error {
 }
 
 const bourneIntegration = `hatch() {
+    local hatch_destination
+    if [ "$#" -eq 0 ]; then
+        hatch_destination=$(HATCH_SHELL_NAVIGATION=1 command hatch && printf '.') || return $?
+        hatch_destination=${hatch_destination%?}
+        [ -n "$hatch_destination" ] || return 0
+        hatch_destination=${hatch_destination%?}
+        builtin cd -- "$hatch_destination"
+        return $?
+    fi
     if [ "${1-}" != cd ]; then
         command hatch "$@"
         return $?
@@ -54,7 +70,6 @@ const bourneIntegration = `hatch() {
         command hatch "$@"
         return $?
     fi
-    local hatch_destination
     # A sentinel preserves trailing newlines in a literal directory name.
     hatch_destination=$(command hatch path "$2" && printf '.') || return $?
     hatch_destination=${hatch_destination%?}
@@ -64,7 +79,20 @@ const bourneIntegration = `hatch() {
 `
 
 const fishIntegration = `function hatch
-    if test (count $argv) -eq 0; or test "$argv[1]" != cd
+    if test (count $argv) -eq 0
+        set -l hatch_destination (HATCH_SHELL_NAVIGATION=1 command hatch | string collect --no-trim-newlines)
+        set -l hatch_lookup_status $pipestatus[1]
+        if test $hatch_lookup_status -ne 0
+            return $hatch_lookup_status
+        end
+        if test (count $hatch_destination) -eq 0
+            return 0
+        end
+        set hatch_destination (string split --right --max 1 \n -- "$hatch_destination")
+        builtin cd -- "$hatch_destination[1]"
+        return $status
+    end
+    if test "$argv[1]" != cd
         command hatch $argv
         return $status
     end
