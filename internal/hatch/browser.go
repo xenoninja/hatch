@@ -161,29 +161,29 @@ func loadBrowserCandidates(root, experiments string) ([]browserCandidate, error)
 
 // Selection shares recovery with every registry command and compares both the
 // creation sequence and location under the lock. Status changes are harmless.
-func validateBrowserCandidate(root, experiments string, candidate browserCandidate) (bool, error) {
+func validateBrowserCandidate(root, experiments string, candidate browserCandidate) (available, changed bool, err error) {
 	s, err := openStore(root, experiments, false)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 	if s == nil {
-		return false, fmt.Errorf("experimental project %q changed while browsing; run hatch again", candidate.Name)
+		return false, true, nil
 	}
 	defer s.close()
 	if err := s.reconcile(); err != nil {
-		return false, err
+		return false, false, err
 	}
 	var sequence int64
 	var location string
 	err = s.db.QueryRow(`SELECT sequence,location FROM projects WHERE name=?`, candidate.Name).Scan(&sequence, &location)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && (sequence != candidate.sequence || location != candidate.Location)) {
-		return false, fmt.Errorf("experimental project %q changed while browsing; run hatch again", candidate.Name)
+		return false, true, nil
 	}
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 	info, err := os.Stat(location)
-	return err == nil && info.IsDir(), nil
+	return err == nil && info.IsDir(), false, nil
 }
 
 func runBrowser(root, experiments string, candidates []browserCandidate) (destination string, err error) {
@@ -220,6 +220,7 @@ func runBrowser(root, experiments string, candidates []browserCandidate) (destin
 			return "", err
 		}
 		previousQuery := query
+		refresh := false
 		switch key {
 		case 3, 27:
 			return "", nil
@@ -227,6 +228,9 @@ func runBrowser(root, experiments string, candidates []browserCandidate) (destin
 			selected = max(0, min(selected+1, len(matches)-1))
 		case 16:
 			selected = max(selected-1, 0)
+		case 18:
+			refresh = true
+			diagnostic = ""
 		case 8, 127:
 			if query != "" {
 				_, size := utf8.DecodeLastRuneInString(query)
@@ -238,11 +242,14 @@ func runBrowser(root, experiments string, candidates []browserCandidate) (destin
 			if len(matches) == 0 {
 				continue
 			}
-			available, err := validateBrowserCandidate(root, experiments, matches[selected].browserCandidate)
+			available, changed, err := validateBrowserCandidate(root, experiments, matches[selected].browserCandidate)
 			if err != nil {
 				return "", err
 			}
-			if !available {
+			if changed {
+				diagnostic = "Selected project changed while browsing; review results and press Enter again"
+				refresh = true
+			} else if !available {
 				diagnostic = "project location unavailable or not a directory; choose another project"
 				matches[selected].unavailable = true
 				for i := range candidates {
@@ -258,9 +265,25 @@ func runBrowser(root, experiments string, candidates []browserCandidate) (destin
 				query += string(key)
 			}
 		}
-		if query != previousQuery {
+		if refresh {
+			candidates, err = loadBrowserCandidates(root, experiments)
+			if err != nil {
+				return "", err
+			}
+			if len(candidates) == 0 {
+				if err := view.clear(); err != nil {
+					return "", err
+				}
+				_, err := io.WriteString(os.Stderr, "No experimental projects tracked.\r\n")
+				return "", err
+			}
+		}
+		if refresh || query != previousQuery {
 			matches = matchBrowserCandidates(candidates, query)
-			selected, diagnostic = 0, ""
+			selected = 0
+			if query != previousQuery {
+				diagnostic = ""
+			}
 		}
 		if err := view.draw(matches, selected, query, len(candidates), diagnostic); err != nil {
 			return "", err
@@ -357,7 +380,7 @@ func (v *browserView) draw(matches []browserMatch, selected int, query string, t
 		}
 		lines = append(lines, row)
 	}
-	lines = append(lines, "Type: search · Backspace: edit · Ctrl-U: clear", "Up/Down · Ctrl-P/Ctrl-N · Enter: enter · Esc/Ctrl-C: cancel", diagnostic)
+	lines = append(lines, "Type: search · Backspace: edit · Ctrl-U: clear · Ctrl-R: refresh", "Up/Down · Ctrl-P/Ctrl-N · Enter: enter · Esc/Ctrl-C: cancel", diagnostic)
 	for i, line := range lines {
 		// Clip by terminal columns before styling, so wide query characters
 		// cannot wrap and escape sequences cannot be partially truncated.

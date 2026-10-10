@@ -48,9 +48,11 @@ Bare hatch searches project names through shell integration. Type literal text;
 matching ignores case and allows gaps (MWA matches my-web-app).
 Empty queries list alphabetically; searches rank exact names, prefixes,
 substrings, then gapped matches. Matched characters are highlighted.
-Backspace edits; Ctrl-U clears. Query changes select the first match.
+Backspace edits; Ctrl-U clears; Ctrl-R refreshes while preserving the query.
+Query changes and refreshes select the first match.
 Use Up/Down or Ctrl-P/Ctrl-N, Enter to enter, and Esc or Ctrl-C to cancel.
 Enter is required for one match and does nothing with zero matches.
+Changed or relocated selections refresh results and require another Enter.
 Run hatch cd --help for shell setup; reload the integration after upgrading.
 
 More details: https://github.com/xenoninja/hatch/blob/main/docs/reference.md

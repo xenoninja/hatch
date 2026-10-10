@@ -517,14 +517,41 @@ func runWhileBrowsing(t *testing.T, home string, success bool, controls []string
 	return output.String()
 }
 
+func TestBrowserRefreshPreservesQueryAndOrdering(t *testing.T) {
+	home := browserHome(t)
+	for _, name := range []string{"other", "a-x-b", "cab", "ab-long"} {
+		run(t, home, true, nil, "new", name)
+	}
+	s := startBrowser(t, "bash", home, nil, false)
+	s.searchScreen("", "a-x-b", "a-x-b", "ab-long", "cab", "other")
+	s.send("AB")
+	s.searchScreen("AB", "ab-long", "ab-long", "cab", "a-x-b")
+	runWhileBrowsing(t, home, true, nil, "new", "ab")
+	runWhileBrowsing(t, home, true, nil, "status", "cab", "completed")
+	// Another key redraws the captured snapshot without incorporating changes.
+	s.send("\x0e")
+	screen := s.searchScreen("AB", "cab", "ab-long", "cab", "a-x-b")
+	contains(t, screen.String(), "3 matches / 4 projects", "cab  active")
+	s.send("\x12")
+	screen = s.searchScreen("AB", "ab", "ab", "ab-long", "cab", "a-x-b")
+	contains(t, screen.String(), "4 matches / 5 projects", "cab  completed", "Ctrl-R")
+	// Refresh releases the lock before the next key and cancellation never cd's.
+	runWhileBrowsing(t, home, true, nil, "info", "ab")
+	s.send("\x03")
+	s.finish(home, true)
+}
+
 func TestBrowserConcurrentChanges(t *testing.T) {
 	for _, change := range []string{"new", "status", "remove", "replace", "promote", "recovery"} {
 		t.Run(change, func(t *testing.T) {
 			home := browserHome(t)
 			run(t, home, true, nil, "new", "alpha")
+			run(t, home, true, nil, "new", "alpha-next")
 			location := filepath.Join(home, "experiments", "2026-09-14-alpha")
 			s := startBrowser(t, "bash", home, nil, false)
-			s.waitFor("Enter")
+			s.searchScreen("", "alpha", "alpha", "alpha-next")
+			s.send("ALP")
+			s.searchScreen("ALP", "alpha", "alpha", "alpha-next")
 			switch change {
 			case "new":
 				runWhileBrowsing(t, home, true, nil, "new", "beta")
@@ -546,16 +573,180 @@ func TestBrowserConcurrentChanges(t *testing.T) {
 			s.send("\r")
 			if change == "new" || change == "status" {
 				s.finish(location, true)
+			} else if change == "recovery" {
+				contains(t, s.finish(home, false), "uncertain")
 			} else {
-				out := s.finish(home, false)
-				if change == "recovery" {
-					contains(t, out, "uncertain")
+				s.waitScreen(func(screen vt10x.Terminal) bool {
+					return strings.Contains(screen.String(), "changed while browsing")
+				})
+				wantLocation := location
+				if change == "remove" {
+					s.searchScreen("ALP", "alpha-next", "alpha-next")
+					wantLocation = filepath.Join(home, "experiments", "2026-09-14-alpha-next")
 				} else {
-					contains(t, out, "changed")
+					screen := s.searchScreen("ALP", "alpha", "alpha", "alpha-next")
+					if change == "promote" {
+						wantLocation = filepath.Join(home, "promoted")
+						contains(t, screen.String(), "alpha  promoted")
+					}
 				}
+				if strings.Contains(s.text(), "HATCH_TEST_DONE") {
+					t.Fatal("changed selection handed off a destination before a second Enter")
+				}
+				runWhileBrowsing(t, home, true, nil, "info", "alpha-next")
+				s.send("\r")
+				s.finish(wantLocation, true)
 			}
 		})
 	}
+}
+
+func TestBrowserRefreshLocationAndAvailability(t *testing.T) {
+	for _, shell := range []string{"bash", "zsh", "fish"} {
+		t.Run(shell, func(t *testing.T) {
+			home := browserHome(t)
+			run(t, home, true, nil, "new", "alpha")
+			s := startBrowser(t, shell, home, nil, false)
+			s.searchScreen("", "alpha", "alpha")
+			s.send("ALP")
+			s.searchScreen("ALP", "alpha", "alpha")
+			target := filepath.Join(home, "promoted ' \" $;* [x]\nproject\n\n")
+			runWhileBrowsing(t, home, true, nil, "promote", "alpha", target)
+			if err := os.Rename(target, target+"-missing"); err != nil {
+				t.Fatal(err)
+			}
+			s.send("\x12")
+			screen := s.waitScreen(func(screen vt10x.Terminal) bool {
+				return strings.Contains(screen.String(), "alpha  promoted (unavailable)")
+			})
+			contains(t, screen.String(), "Search: ALP")
+			if strings.Contains(screen.String(), home) || strings.Contains(screen.String(), "[x]") {
+				t.Fatalf("refresh displayed a location: %q", screen.String())
+			}
+			s.send("\r")
+			s.waitFor("project location unavailable")
+			contains(t, runWhileBrowsing(t, home, true, nil, "info", "alpha"), "Status: promoted", "Location: "+target)
+			if err := os.Rename(target+"-missing", target); err != nil {
+				t.Fatal(err)
+			}
+			s.send("\x12")
+			s.waitScreen(func(screen vt10x.Terminal) bool {
+				return strings.Contains(screen.String(), "alpha  promoted") && !strings.Contains(screen.String(), "unavailable")
+			})
+			s.searchScreen("ALP", "alpha", "alpha")
+			s.send("\r")
+			s.finish(target, true)
+		})
+	}
+}
+
+func TestBrowserRefreshEmptyResults(t *testing.T) {
+	for _, scenario := range []string{"no-matches", "no-matches-selection", "empty-refresh", "empty-selection"} {
+		t.Run(scenario, func(t *testing.T) {
+			home := browserHome(t)
+			run(t, home, true, nil, "new", "alpha")
+			if strings.HasPrefix(scenario, "no-matches") {
+				run(t, home, true, nil, "new", "beta")
+			}
+			s := startBrowser(t, "bash", home, nil, false)
+			s.waitFor("Enter")
+			s.send("ALP")
+			s.searchScreen("ALP", "alpha", "alpha")
+			if err := os.Remove(filepath.Join(home, "experiments", "2026-09-14-alpha")); err != nil {
+				t.Fatal(err)
+			}
+			runWhileBrowsing(t, home, true, nil, "remove", "alpha", "--force")
+			key := "\x12"
+			if strings.HasSuffix(scenario, "selection") {
+				key = "\r"
+			}
+			s.send(key)
+			if strings.HasPrefix(scenario, "no-matches") {
+				screen := s.searchScreen("ALP", "")
+				contains(t, screen.String(), "0 matches / 1 projects")
+				// Enter has no effect; subsequent input must still edit the query.
+				s.send("\r?")
+				s.searchScreen("ALP?", "")
+				runWhileBrowsing(t, home, true, nil, "info", "beta")
+				s.send("\x03")
+				s.finish(home, true)
+			} else {
+				contains(t, s.finish(home, true), "No experimental projects tracked.")
+			}
+		})
+	}
+}
+
+func TestBrowserRefreshRecovery(t *testing.T) {
+	for _, point := range []string{"after-directory", "before-registry"} {
+		t.Run(point, func(t *testing.T) {
+			home := browserHome(t)
+			run(t, home, true, nil, "new", "alpha")
+			s := startBrowser(t, "bash", home, nil, false)
+			s.searchScreen("", "alpha", "alpha")
+			s.send("A")
+			s.searchScreen("A", "alpha", "alpha")
+			runWhileBrowsing(t, home, false, []string{"HATCH_TEST_INTERRUPT=" + point}, "new", "beta")
+			s.send("\x12")
+			if point == "after-directory" {
+				contains(t, s.finish(home, false), "uncertain", "manual investigation")
+			} else {
+				screen := s.searchScreen("A", "alpha", "alpha", "beta")
+				contains(t, screen.String(), "2 matches / 2 projects")
+				runWhileBrowsing(t, home, true, nil, "info", "beta")
+				s.send("\x03")
+				s.finish(home, true)
+			}
+		})
+	}
+}
+
+func TestBrowserChangedSelectionCancellation(t *testing.T) {
+	for _, shell := range []string{"bash", "zsh", "fish"} {
+		t.Run(shell, func(t *testing.T) {
+			home := browserHome(t)
+			run(t, home, true, nil, "new", "alpha")
+			s := startBrowser(t, shell, home, nil, false)
+			s.searchScreen("", "alpha", "alpha")
+			s.send("ALP")
+			s.searchScreen("ALP", "alpha", "alpha")
+			runWhileBrowsing(t, home, true, nil, "promote", "alpha", filepath.Join(home, "promoted"))
+			s.send("\r")
+			screen := s.waitScreen(func(screen vt10x.Terminal) bool {
+				return strings.Contains(screen.String(), "changed while browsing") && strings.Contains(screen.String(), "alpha  promoted")
+			})
+			contains(t, screen.String(), "Search: ALP", "press Enter again")
+			runWhileBrowsing(t, home, true, nil, "info", "alpha")
+			s.send("\x1b")
+			s.finish(home, true)
+		})
+	}
+}
+
+func TestBrowserChangedLongNameExplainsConfirmation(t *testing.T) {
+	home := browserHome(t)
+	name := strings.Repeat("long-name-", 16) + "end"
+	run(t, home, true, nil, "new", name)
+	s := startBrowser(t, "bash", home, nil, false)
+	s.waitFor("Enter")
+	if err := pty.Setsize(s.terminal, &pty.Winsize{Rows: 30, Cols: 80}); err != nil {
+		t.Fatal(err)
+	}
+	s.send("long")
+	s.waitScreen(func(screen vt10x.Terminal) bool {
+		return strings.Contains(screen.String(), "Search: long")
+	})
+	runWhileBrowsing(t, home, true, nil, "promote", name, filepath.Join(home, "promoted"))
+	s.send("\r")
+	screen := s.waitScreen(func(screen vt10x.Terminal) bool {
+		return strings.Contains(screen.String(), "changed while browsing") && strings.Contains(screen.String(), "press Enter again")
+	})
+	contains(t, screen.String(), "Search: long")
+	if err := pty.Setsize(s.terminal, &pty.Winsize{Rows: 30, Cols: 120}); err != nil {
+		t.Fatal(err)
+	}
+	s.send("\x03")
+	s.finish(home, true)
 }
 
 func TestBrowserInvocationAndRecovery(t *testing.T) {

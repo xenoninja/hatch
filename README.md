@@ -130,8 +130,16 @@ selected directory, and Esc or Ctrl-C cancels. Enter is required even for one
 match; with no matches it does nothing so you can edit or cancel. The browser
 shows a search field, match count, names and statuses, with up to ten rows that
 scroll. Missing or non-directory locations stay searchable as unavailable;
-selecting one explains the problem and keeps the browser open. Explicit refresh
-is planned separately.
+selecting one explains the problem and keeps the browser open.
+
+Results stay stable while browsing. Ctrl-R refreshes projects, statuses, and
+availability while preserving your query and selecting the first match. Other
+Hatch commands can run while the browser waits for input. Enter rechecks the
+selected project's identity and location: removal, same-name recreation, or
+promotion refreshes results with an explanation and requires another Enter before
+navigation. A status-only change permits navigation. If refresh finds no query
+matches, keep editing or cancel; an empty registry exits successfully with
+`No experimental projects tracked.` and leaves your directory unchanged.
 
 After upgrading, reload your startup file or start a new shell to install the
 updated function. Direct executable invocation shows setup guidance.

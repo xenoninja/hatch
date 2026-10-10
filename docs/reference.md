@@ -102,7 +102,7 @@ the prompt. An empty query lists all tracked projects alphabetically by name, in
 active, completed, abandoned, and promoted projects. Rows show only name and
 status, with an unavailable annotation for missing or non-directory locations.
 There is a search field, match count, keyboard hint, and up to ten visible rows;
-longer lists scroll. Explicit refresh is planned separately.
+longer lists scroll.
 
 Typing filters tracked names only; status and location never contribute to a
 match. Input is literal text, not a regular expression or wildcard pattern.
@@ -114,8 +114,8 @@ matched characters rank higher, using the tightest matching span in the name.
 Remaining ties prefer shorter names, then alphabetical order. There is no
 history or recency weighting.
 
-The first project is selected initially and after each query change, resetting
-the scrolled view. Backspace edits the query; Ctrl-U clears it. Up/Down and
+The first project is selected initially, after each query change, and after a
+refresh, resetting the scrolled view. Backspace edits the query; Ctrl-U clears it. Up/Down and
 Ctrl-P/Ctrl-N move without wrapping. Enter is always required, even with one
 match, and enters the selected stored
 location in the current shell. Esc or Ctrl-C cancels quietly with status zero and
@@ -132,13 +132,23 @@ to `hatch help` and `hatch list`. Once these prerequisites are satisfied, an abs
 or empty registry prints `No experimental projects tracked.` and returns zero
 without initializing storage or changing cwd.
 
-Snapshots and selection checks run shared recovery under the registry lock, then
-release it; no lock is held while waiting for keyboard input. Results remain
-stable while browsing. Enter checks the captured unique creation sequence, stored
-location, and current directory availability. A status-only update permits
-navigation. Removal, same-name replacement, or relocation reports a changed-project
-error and exits without navigation; run `hatch` again to see current results.
-Uncertain recovery and configuration/storage errors also prevent navigation.
+Snapshots, refreshes, and selection checks run shared recovery under the registry
+lock, then release it; no lock is held while waiting for keyboard input, so other
+Hatch commands can finish while the browser is open. Results remain stable while
+browsing, without background polling or filesystem watching. Ctrl-R refreshes
+tracked projects, statuses, locations, and availability, retaining the query and
+applying the same filtering and ordering. Locations remain hidden.
+
+Enter checks the captured unique creation sequence, stored location, and current
+directory availability. A status-only update permits navigation when identity and
+location are unchanged. Removal, same-name replacement (even at the same location),
+or relocation refreshes results with an explanation and retains the query. Review
+the refreshed results and press Enter again before navigation. An unavailable
+location keeps the browser open with its diagnostic and leaves tracking and cwd
+unchanged. If refresh leaves no query matches, Enter does nothing; if the registry
+becomes empty, the browser clears, prints `No experimental projects tracked.`, and
+exits successfully without navigation. Uncertain recovery and operational errors
+restore the terminal, fail, and leave cwd unchanged.
 
 Browser rendering and diagnostics use the terminal on stderr; stdout carries only
 the selected literal location for the shell function. Spaces, shell metacharacters,
@@ -250,7 +260,13 @@ shell processes and observe directory changes, failure behavior, and forwarding.
 Browser tests attach those shells to a pseudo-terminal and drive actual keys.
 They check rendered screens with a terminal emulator, terminal settings, literal
 paths and actual cwd, cancellation, scrolling, unavailable locations, recovery,
-concurrent mutations, and registry-lock release.
+concurrent mutations, and registry-lock release. Refresh coverage keeps real Hatch
+commands running while the picker is open, checks Ctrl-R query preservation and
+ranking, updated status/location/availability, empty results, shared recovery, and
+terminal cleanup. Removal, same-name recreation at the same location, and promotion
+require a second Enter after selection revalidation; status-only updates navigate
+immediately. Refresh and cancellation leave cwd unchanged, and literal refreshed
+destinations are handed off through bash, zsh, and fish.
 Search coverage checks visible category, gap, length, and alphabetical ranking,
 case-insensitivity, matched-character highlighting, literal name-only matching,
 query editing and selection reset, zero matches, and explicit single-match confirmation.
