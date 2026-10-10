@@ -65,7 +65,7 @@ hatch list
 hatch info tiny-search
 
 # Enter the folder and do stuff
-hatch                    # Browse and choose a project (requires shell setup)
+hatch                    # Search and choose a project (requires shell setup)
 hatch cd tiny-search
 
 # Finish the experiment, keeping its files
@@ -89,7 +89,7 @@ Names use lowercase letters or digits separated by single hyphens, such as `tiny
 
 | Command | What it does |
 | --- | --- |
-| `hatch` | Browse tracked projects and enter one in your current shell (requires setup below). |
+| `hatch` | Search tracked project names and enter one in your current shell (requires setup below). |
 | `hatch new <name>` | Create an empty, dated experiment directory. |
 | `hatch list` | List all tracked projects, newest first. |
 | `hatch info <name>` | Show a project's creation date, status, and location. |
@@ -116,13 +116,22 @@ Add the line for your shell to its startup file, then reload the file or open a 
 | zsh | `~/.zshrc` | `eval "$(hatch shell-init zsh)"` |
 | fish | `~/.config/fish/config.fish` | `hatch shell-init fish \| source` |
 
-With integration loaded, plain `hatch` opens an alphabetical browser of all
-tracked projects, including promoted ones. Up/Down or Ctrl-P/Ctrl-N move the
-highlight, Enter enters the selected directory, and Esc or Ctrl-C cancels.
-The browser shows names and statuses, with up to ten rows that scroll. Missing
-or non-directory locations stay listed as unavailable; selecting one explains
-the problem and keeps the browser open. This release supports browsing; name
-filtering and refresh are planned separately.
+With integration loaded, plain `hatch` opens a searchable browser of all
+tracked projects, including promoted ones. Type to filter names: matching is
+literal, ignores case, and allows gaps (`MWA` matches `my-web-app`). Matched
+characters are highlighted. An empty query lists projects alphabetically;
+searches rank exact names, prefixes, contiguous substrings, then gapped matches.
+Gapped matches prefer fewer skipped characters; remaining ties prefer shorter
+names, then alphabetical order. Status and location are not searched.
+
+Backspace edits the query and Ctrl-U clears it. Each query change selects the
+first result. Up/Down or Ctrl-P/Ctrl-N move the highlight, Enter enters the
+selected directory, and Esc or Ctrl-C cancels. Enter is required even for one
+match; with no matches it does nothing so you can edit or cancel. The browser
+shows a search field, match count, names and statuses, with up to ten rows that
+scroll. Missing or non-directory locations stay searchable as unavailable;
+selecting one explains the problem and keeps the browser open. Explicit refresh
+is planned separately.
 
 After upgrading, reload your startup file or start a new shell to install the
 updated function. Direct executable invocation shows setup guidance.

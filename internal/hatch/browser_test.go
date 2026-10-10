@@ -109,6 +109,197 @@ func (s *browserSession) waitFor(value string) {
 	}
 }
 
+// Wait on the current visible terminal, not text from an earlier redraw.
+func (s *browserSession) waitScreen(check func(vt10x.Terminal) bool) vt10x.Terminal {
+	s.t.Helper()
+	timer := time.NewTimer(8 * time.Second)
+	defer timer.Stop()
+	for {
+		screen := s.screen()
+		if check(screen) {
+			return screen
+		}
+		select {
+		case <-s.changed:
+		case <-timer.C:
+			s.t.Fatalf("unexpected browser screen: %q", screen.String())
+		}
+	}
+}
+
+func browserRows(screen vt10x.Terminal) []string {
+	var names []string
+	for _, row := range strings.Split(screen.String(), "\n") {
+		if !strings.HasPrefix(row, "  ") && !strings.HasPrefix(row, "> ") {
+			continue
+		}
+		fields := strings.Fields(row)
+		if len(fields) > 0 && fields[0] == ">" {
+			fields = fields[1:]
+		}
+		if len(fields) >= 2 {
+			switch fields[1] {
+			case "active", "completed", "abandoned", "promoted":
+				names = append(names, fields[0])
+			}
+		}
+	}
+	return names
+}
+
+func (s *browserSession) searchScreen(query, selected string, names ...string) vt10x.Terminal {
+	s.t.Helper()
+	return s.waitScreen(func(screen vt10x.Terminal) bool {
+		queryShown := false
+		for _, row := range strings.Split(screen.String(), "\n") {
+			queryShown = queryShown || strings.TrimSpace(row) == "Search: "+query || (query == "" && strings.TrimSpace(row) == "Search:")
+		}
+		return queryShown && strings.Join(browserRows(screen), ",") == strings.Join(names, ",") &&
+			(selected == "" || strings.Contains(screen.String(), "> "+selected+"  "))
+	})
+}
+
+func TestBrowserSearchRanking(t *testing.T) {
+	home := browserHome(t)
+	for _, name := range []string{"other", "a-x-b", "a-xxxx-a-b", "za-b", "ya-b", "a-b", "dab", "cab", "ab-long", "ab-z", "ab"} {
+		run(t, home, true, nil, "new", name)
+	}
+	s := startBrowser(t, "bash", home, nil, false)
+	s.waitFor("Enter")
+	s.send("AB")
+	want := "ab,ab-z,ab-long,cab,dab,a-b,ya-b,za-b,a-xxxx-a-b,a-x-b"
+	screen := s.waitScreen(func(screen vt10x.Terminal) bool {
+		return strings.Contains(screen.String(), "Search: AB") && strings.Join(browserRows(screen), ",") == want
+	})
+	contains(t, screen.String(), "10 matches / 11 projects", "> ab  active")
+	s.send("\r")
+	s.finish(filepath.Join(home, "experiments", "2026-09-14-ab"), true)
+}
+
+func TestBrowserSearchHighlighting(t *testing.T) {
+	home := browserHome(t)
+	for _, name := range []string{"my-web-app", "x-mwa", "mwa-test", "mwa"} {
+		run(t, home, true, nil, "new", name)
+	}
+	s := startBrowser(t, "bash", home, nil, false)
+	s.waitFor("Enter")
+	s.send("MWA")
+	screen := s.waitScreen(func(screen vt10x.Terminal) bool {
+		return strings.Contains(screen.String(), "Search: MWA") && len(browserRows(screen)) == 4
+	})
+	for name, positions := range map[string][]int{
+		"mwa": {0, 1, 2}, "mwa-test": {0, 1, 2}, "x-mwa": {2, 3, 4}, "my-web-app": {0, 3, 7},
+	} {
+		for y, row := range strings.Split(screen.String(), "\n") {
+			x := strings.Index(row, name+"  active")
+			if x < 0 {
+				continue
+			}
+			plain := screen.Cell(x+len(name)+2, y)
+			for i := range len(name) {
+				cell := screen.Cell(x+i, y)
+				styled := cell.Mode != plain.Mode || cell.FG != plain.FG || cell.BG != plain.BG
+				want := false
+				for _, position := range positions {
+					want = want || position == i
+				}
+				if styled != want {
+					t.Fatalf("%s character %d highlighted=%v, want %v", name, i, styled, want)
+				}
+			}
+		}
+	}
+	s.send("\x0e\x0e\x0e\r")
+	s.finish(filepath.Join(home, "experiments", "2026-09-14-my-web-app"), true)
+}
+
+func TestBrowserSearchEditingAndConfirmation(t *testing.T) {
+	home := browserHome(t)
+	for _, name := range []string{"zebra", "beta", "alpha"} {
+		run(t, home, true, nil, "new", name)
+	}
+	s := startBrowser(t, "bash", home, nil, false)
+	s.searchScreen("", "alpha", "alpha", "beta", "zebra")
+	s.send("\x0e\x0e")
+	s.searchScreen("", "zebra", "alpha", "beta", "zebra")
+	s.send("a")
+	s.searchScreen("a", "alpha", "alpha", "beta", "zebra")
+	s.send("l")
+	s.searchScreen("al", "alpha", "alpha")
+	// A single match must still accept more input, without navigating.
+	s.send("?\x0e\x10\r")
+	s.searchScreen("al?", "")
+	s.send("\x7f")
+	s.searchScreen("al", "alpha", "alpha")
+	s.send("\x08")
+	s.searchScreen("a", "alpha", "alpha", "beta", "zebra")
+	s.send("\x0e")
+	s.searchScreen("a", "beta", "alpha", "beta", "zebra")
+	s.send("\x15")
+	screen := s.searchScreen("", "alpha", "alpha", "beta", "zebra")
+	contains(t, screen.String(), "Backspace", "Ctrl-U")
+	s.send("\x7f\x10\r")
+	s.finish(filepath.Join(home, "experiments", "2026-09-14-alpha"), true)
+}
+
+func TestBrowserSearchUsesLiteralNamesOnly(t *testing.T) {
+	home := browserHome(t)
+	run(t, home, true, nil, "new", "alpha")
+	run(t, home, true, nil, "new", "my-web-app")
+	run(t, home, true, nil, "status", "my-web-app", "completed")
+	target := filepath.Join(home, "secret-target")
+	run(t, home, true, nil, "promote", "alpha", target)
+	marker := filepath.Join(target, "keep.txt")
+	if err := os.WriteFile(marker, []byte("untouched"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	before := run(t, home, true, nil, "list")
+	s := startBrowser(t, "bash", home, nil, false)
+	s.waitFor("Enter")
+	for _, query := range []string{"active", "completed", "promoted", "secret-target", ".", "*", "[", "?", "apw", "a p", "é"} {
+		s.send("\x15" + query + "\r")
+		screen := s.searchScreen(query, "")
+		contains(t, screen.String(), "0 matches / 2 projects")
+	}
+	// Backspace removes the entire Unicode character, then the user can search.
+	s.send("\x7fa")
+	s.searchScreen("a", "alpha", "alpha", "my-web-app")
+	s.send("\x03")
+	s.finish(home, true)
+	if after := run(t, home, true, nil, "list"); after != before {
+		t.Fatalf("search changed tracking: %q -> %q", before, after)
+	}
+	if contents, err := os.ReadFile(marker); err != nil || string(contents) != "untouched" {
+		t.Fatalf("search changed project files: %q, %v", contents, err)
+	}
+}
+
+func TestBrowserSearchWideQueryClipping(t *testing.T) {
+	home := browserHome(t)
+	run(t, home, true, nil, "new", "alpha")
+	s := startBrowser(t, "bash", home, nil, false)
+	s.waitFor("Enter")
+	s.send(strings.Repeat("界", 60))
+	// At 120 columns, the eight-column label and 55 double-width characters
+	// fit with a spare column. A 56th character would wrap on a real terminal.
+	s.waitScreen(func(screen vt10x.Terminal) bool {
+		for _, row := range strings.Split(screen.String(), "\n") {
+			if strings.TrimSpace(row) == "Search: "+strings.Repeat("界", 55) {
+				return strings.Contains(screen.String(), "0 matches / 1 projects")
+			}
+		}
+		return false
+	})
+	// Clipping affects presentation only: all 60 query characters are editable.
+	s.send(strings.Repeat("\x7f", 60) + "a")
+	s.searchScreen("a", "alpha", "alpha")
+	s.send("\x03")
+	s.finish(home, true)
+	if strings.Contains(s.screen().String(), "Search:") || strings.Contains(s.screen().String(), "界") {
+		t.Fatal("query text remained after cancellation")
+	}
+}
+
 func (s *browserSession) send(keys string) {
 	s.t.Helper()
 	if _, err := s.terminal.WriteString(keys); err != nil {
@@ -181,6 +372,8 @@ func TestBrowserShellSelection(t *testing.T) {
 			if !strings.Contains(rows[0], "PROMPT>") || strings.Contains(rows[0], "projects") || !strings.Contains(rows[1], "2 projects") {
 				t.Fatalf("browser is not below prompt: %q", rows)
 			}
+			s.send("ALP")
+			s.searchScreen("ALP", "alpha", "alpha")
 			s.send("\r")
 			s.finish(filepath.Join(home, "experiments", "2026-09-14-alpha"), true)
 		})
@@ -209,6 +402,8 @@ func TestBrowserCancellation(t *testing.T) {
 				run(t, home, true, nil, "new", "only-project")
 				s := startBrowser(t, shell, home, nil, false)
 				s.waitFor("Enter")
+				s.send("ONLY")
+				s.searchScreen("ONLY", "only-project", "only-project")
 				// Even a single result waits for explicit confirmation.
 				if strings.Contains(s.text(), "HATCH_TEST_DONE") {
 					t.Fatal("selected without Enter")
@@ -239,10 +434,24 @@ func TestBrowserMovementAndScrolling(t *testing.T) {
 			if strings.Contains(s.text(), "project-10") {
 				t.Fatalf("more than ten rows: %q", s.text())
 			}
+			visibleNames := func(start int) []string {
+				var names []string
+				for i := start; i < start+10; i++ {
+					names = append(names, browserName(i))
+				}
+				return names
+			}
+			s.send("P")
+			s.searchScreen("P", "project-00", visibleNames(0)...)
 			s.send(keys.up + keys.down)
-			s.waitFor("> project-01")
+			s.searchScreen("P", "project-01", visibleNames(0)...)
 			s.send(strings.Repeat(keys.down, 15))
-			s.waitFor("> project-11")
+			s.searchScreen("P", "project-11", visibleNames(2)...)
+			// Editing resets both the highlight and the scrolled viewport.
+			s.send("R")
+			s.searchScreen("PR", "project-00", visibleNames(0)...)
+			s.send(strings.Repeat(keys.down, 15))
+			s.searchScreen("PR", "project-11", visibleNames(2)...)
 			s.send(keys.up + "\r")
 			s.finish(filepath.Join(home, "experiments", "2026-09-14-project-10"), true)
 		})
@@ -268,12 +477,17 @@ func TestBrowserUnavailableSelection(t *testing.T) {
 			s := startBrowser(t, "bash", home, nil, false)
 			s.waitFor("Enter")
 			contains(t, s.text(), "alpha  abandoned (unavailable)")
+			s.send("ALP")
+			screen := s.searchScreen("ALP", "alpha", "alpha")
+			contains(t, screen.String(), "alpha  abandoned (unavailable)")
 			s.send("\r")
 			s.waitFor("project location unavailable")
 			if strings.Contains(s.text(), "HATCH_TEST_DONE") {
 				t.Fatal("unavailable selection closed browser")
 			}
-			s.send("\x0e\r")
+			s.send("\x15B")
+			s.searchScreen("B", "beta", "beta")
+			s.send("\r")
 			s.finish(filepath.Join(home, "experiments", "2026-09-14-beta"), true)
 			contains(t, run(t, home, true, nil, "info", "alpha"), "Status: abandoned", "Location: "+location)
 		})

@@ -15,7 +15,7 @@ var interrupt = func(string) {}
 const help = `Hatch — a home for your next experiment.
 
 Commands:
-  hatch                               Browse projects (requires shell integration)
+  hatch                               Search projects (requires shell integration)
   hatch new <name>                    Create an empty project folder
   hatch list                          List projects, newest first
   hatch info <name>                   Show a project's details and location
@@ -44,8 +44,13 @@ Statuses:
 Path lookup fails with an error on stderr and no stdout if the name is
 unknown, the location is unavailable, or recovery is uncertain.
 
-Bare hatch browses projects alphabetically through shell integration.
+Bare hatch searches project names through shell integration. Type literal text;
+matching ignores case and allows gaps (MWA matches my-web-app).
+Empty queries list alphabetically; searches rank exact names, prefixes,
+substrings, then gapped matches. Matched characters are highlighted.
+Backspace edits; Ctrl-U clears. Query changes select the first match.
 Use Up/Down or Ctrl-P/Ctrl-N, Enter to enter, and Esc or Ctrl-C to cancel.
+Enter is required for one match and does nothing with zero matches.
 Run hatch cd --help for shell setup; reload the integration after upgrading.
 
 More details: https://github.com/xenoninja/hatch/blob/main/docs/reference.md

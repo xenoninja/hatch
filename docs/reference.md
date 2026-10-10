@@ -98,17 +98,30 @@ executable, preserving argument boundaries, stdout, stderr, and exit status.
 ### Project browser
 
 Plain `hatch` through the initialized function opens an embedded browser below
-the prompt. It lists all tracked projects alphabetically by name, including
+the prompt. An empty query lists all tracked projects alphabetically by name, including
 active, completed, abandoned, and promoted projects. Rows show only name and
 status, with an unavailable annotation for missing or non-directory locations.
-There is a result count, a keyboard hint, and up to ten visible rows; longer lists
-scroll. This slice supports alphabetical browsing, without query filtering or
-explicit refresh.
+There is a search field, match count, keyboard hint, and up to ten visible rows;
+longer lists scroll. Explicit refresh is planned separately.
 
-The first project is highlighted. Up/Down and Ctrl-P/Ctrl-N move without wrapping.
-Enter is always required, even with one candidate, and enters the selected stored
+Typing filters tracked names only; status and location never contribute to a
+match. Input is literal text, not a regular expression or wildcard pattern.
+Matching ignores case and permits gaps between ordered characters (`MWA`
+matches `my-web-app`). Matched name characters are highlighted. Results rank
+exact names first, then prefixes, contiguous substrings, and gapped matches.
+Within gapped matches, fewer skipped characters between the first and last
+matched characters rank higher, using the tightest matching span in the name.
+Remaining ties prefer shorter names, then alphabetical order. There is no
+history or recency weighting.
+
+The first project is selected initially and after each query change, resetting
+the scrolled view. Backspace edits the query; Ctrl-U clears it. Up/Down and
+Ctrl-P/Ctrl-N move without wrapping. Enter is always required, even with one
+match, and enters the selected stored
 location in the current shell. Esc or Ctrl-C cancels quietly with status zero and
 unchanged cwd. The browser clears and restores terminal settings on exit.
+With zero matches, Enter does nothing and the browser stays open for editing or
+cancellation. Searching does not change tracking or project files.
 Selecting an unavailable location explains the problem and keeps browsing;
 tracking and lifecycle status remain unchanged.
 
@@ -238,6 +251,9 @@ Browser tests attach those shells to a pseudo-terminal and drive actual keys.
 They check rendered screens with a terminal emulator, terminal settings, literal
 paths and actual cwd, cancellation, scrolling, unavailable locations, recovery,
 concurrent mutations, and registry-lock release.
+Search coverage checks visible category, gap, length, and alphabetical ranking,
+case-insensitivity, matched-character highlighting, literal name-only matching,
+query editing and selection reset, zero matches, and explicit single-match confirmation.
 
 ```sh
 go vet ./...
