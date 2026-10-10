@@ -3,7 +3,6 @@ package hatch
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"text/tabwriter"
 	"time"
@@ -16,6 +15,7 @@ var interrupt = func(string) {}
 const help = `Hatch — a home for your next experiment.
 
 Commands:
+  hatch                               Browse projects (requires shell integration)
   hatch new <name>                    Create an empty project folder
   hatch list                          List projects, newest first
   hatch info <name>                   Show a project's details and location
@@ -44,13 +44,17 @@ Statuses:
 Path lookup fails with an error on stderr and no stdout if the name is
 unknown, the location is unavailable, or recovery is uncertain.
 
+Bare hatch browses projects alphabetically through shell integration.
+Use Up/Down or Ctrl-P/Ctrl-N, Enter to enter, and Esc or Ctrl-C to cancel.
+Run hatch cd --help for shell setup; reload the integration after upgrading.
+
 More details: https://github.com/xenoninja/hatch/blob/main/docs/reference.md
 `
 
 // Execute runs a Hatch command with the given command-line arguments.
 func Execute(args []string) error {
 	if len(args) == 0 {
-		args = []string{"help"}
+		return browse()
 	}
 	var usage string
 	var wantArgs int
@@ -106,19 +110,10 @@ func Execute(args []string) error {
 			return fmt.Errorf("invalid name %q: use lowercase ASCII letters or digits separated by single hyphens", name)
 		}
 	}
-	home, err := os.UserHomeDir()
+	root, experiments, err := storageDirectories()
 	if err != nil {
 		return err
 	}
-	home, err = filepath.Abs(home)
-	if err != nil {
-		return err
-	}
-	experiments, err := experimentsDirectory(home)
-	if err != nil {
-		return err
-	}
-	root := filepath.Join(xdgHome("XDG_DATA_HOME", filepath.Join(home, ".local", "share")), "hatch")
 	store, err := openStore(root, experiments, args[0] == "new")
 	if err != nil {
 		return err

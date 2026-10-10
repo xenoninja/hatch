@@ -124,7 +124,7 @@ func TestShellNavigationContracts(t *testing.T) {
 			}
 			contains(t, out, "Location: "+target)
 			assertNavigation(t, shell, home, env, target, "", "cd", "example")
-			for _, args := range [][]string{nil, {"path", "example"}, {"info", "example"}, {"info", "unknown"}, {"new", "two words"}} {
+			for _, args := range [][]string{{"path", "example"}, {"info", "example"}, {"info", "unknown"}, {"new", "two words"}} {
 				cmd := command(home, env, args...)
 				var expectedOut, expectedErr bytes.Buffer
 				cmd.Stdout, cmd.Stderr = &expectedOut, &expectedErr

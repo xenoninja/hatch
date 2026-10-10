@@ -3,9 +3,12 @@ module github.com/xenoninja/hatch
 go 1.24.0
 
 require (
+	github.com/creack/pty v1.1.24
+	github.com/hinshun/vt10x v0.0.0-20220301184237-5011da428d02
 	github.com/mattn/go-isatty v0.0.20
 	github.com/pelletier/go-toml/v2 v2.2.4
 	golang.org/x/sys v0.37.0
+	golang.org/x/term v0.36.0
 	modernc.org/sqlite v1.46.1
 )
 
