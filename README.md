@@ -122,15 +122,18 @@ literal, ignores case, and allows gaps (`MWA` matches `my-web-app`). Matched
 characters are highlighted. An empty query lists projects alphabetically;
 searches rank exact names, prefixes, contiguous substrings, then gapped matches.
 Gapped matches prefer fewer skipped characters; remaining ties prefer shorter
-names, then alphabetical order. Status and location are not searched.
+names, then alphabetical order. Creation date, status, and location are not
+searched.
 
 Backspace edits the query and Ctrl-U clears it. Each query change selects the
 first result. Up/Down or Ctrl-P/Ctrl-N move the highlight, Enter enters the
 selected directory, and Esc or Ctrl-C cancels. Enter is required even for one
 match; with no matches it does nothing so you can edit or cancel. The browser
-shows a search field, match count, names and statuses, with up to ten rows that
-scroll. Missing or non-directory locations stay searchable as unavailable;
-selecting one explains the problem and keeps the browser open.
+shows only a search field and aligned result columns for name, status, and
+creation date (`YYYY-MM-DD`), with up to ten rows that scroll. Long names are
+clipped to keep the metadata visible. Missing or non-directory locations stay
+searchable as unavailable; selecting one explains the problem and keeps the
+browser open.
 
 Results stay stable while browsing. Ctrl-R refreshes projects, statuses, and
 availability while preserving your query and selecting the first match. Other

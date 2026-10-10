@@ -99,13 +99,16 @@ executable, preserving argument boundaries, stdout, stderr, and exit status.
 
 Plain `hatch` through the initialized function opens an embedded browser below
 the prompt. An empty query lists all tracked projects alphabetically by name, including
-active, completed, abandoned, and promoted projects. Rows show only name and
-status, with an unavailable annotation for missing or non-directory locations.
-There is a search field, match count, keyboard hint, and up to ten visible rows;
-longer lists scroll.
+active, completed, abandoned, and promoted projects. Rows show aligned columns
+for name, status, and creation date (`YYYY-MM-DD`),
+with an unavailable annotation for missing or non-directory locations. Long
+names are clipped to keep the metadata visible.
+The browser shows only the search field and up to ten result rows; longer lists
+scroll. Diagnostics appear when a selection is unavailable or has changed.
 
-Typing filters tracked names only; status and location never contribute to a
-match. Input is literal text, not a regular expression or wildcard pattern.
+Typing filters tracked names only; creation date, status, and location never
+contribute to a match. Input is literal text, not a regular expression or
+wildcard pattern.
 Matching ignores case and permits gaps between ordered characters (`MWA`
 matches `my-web-app`). Matched name characters are highlighted. Results rank
 exact names first, then prefixes, contiguous substrings, and gapped matches.

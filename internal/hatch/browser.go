@@ -141,7 +141,7 @@ func loadBrowserCandidates(root, experiments string) ([]browserCandidate, error)
 	if err := s.reconcile(); err != nil {
 		return nil, err
 	}
-	rows, err := s.db.Query(`SELECT sequence,name,status,location FROM projects ORDER BY name`)
+	rows, err := s.db.Query(`SELECT sequence,name,created_date,status,location FROM projects ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +149,7 @@ func loadBrowserCandidates(root, experiments string) ([]browserCandidate, error)
 	var candidates []browserCandidate
 	for rows.Next() {
 		var c browserCandidate
-		if err := rows.Scan(&c.sequence, &c.Name, &c.Status, &c.Location); err != nil {
+		if err := rows.Scan(&c.sequence, &c.Name, &c.Date, &c.Status, &c.Location); err != nil {
 			return nil, err
 		}
 		info, err := os.Stat(c.Location)
@@ -211,7 +211,7 @@ func runBrowser(root, experiments string, candidates []browserCandidate) (destin
 	if _, err := io.WriteString(os.Stderr, "\r\n"); err != nil {
 		return "", err
 	}
-	if err := view.draw(matches, selected, query, len(candidates), ""); err != nil {
+	if err := view.draw(matches, selected, query, ""); err != nil {
 		return "", err
 	}
 	for {
@@ -285,7 +285,7 @@ func runBrowser(root, experiments string, candidates []browserCandidate) (destin
 				diagnostic = ""
 			}
 		}
-		if err := view.draw(matches, selected, query, len(candidates), diagnostic); err != nil {
+		if err := view.draw(matches, selected, query, diagnostic); err != nil {
 			return "", err
 		}
 	}
@@ -357,7 +357,7 @@ func (v *browserView) clear() error {
 	return err
 }
 
-func (v *browserView) draw(matches []browserMatch, selected int, query string, total int, diagnostic string) error {
+func (v *browserView) draw(matches []browserMatch, selected int, query, diagnostic string) error {
 	if err := v.clear(); err != nil {
 		return err
 	}
@@ -365,29 +365,49 @@ func (v *browserView) draw(matches []browserMatch, selected int, query string, t
 	if err != nil {
 		return err
 	}
-	visible := min(10, len(matches), max(1, height-6))
+	visible := min(10, len(matches), max(1, height-3))
 	start := max(0, selected-visible+1)
-	lines := []string{fmt.Sprintf("%d matches / %d projects", len(matches), total), "Search: " + query}
+	// Measure all matches so columns stay aligned while scrolling. Reserve
+	// space for metadata before clipping long names to the terminal width.
+	nameWidth, statusWidth, annotationWidth := 0, 0, 0
+	for _, c := range matches {
+		nameWidth = max(nameWidth, len(c.Name))
+		statusWidth = max(statusWidth, len(c.Status))
+		if c.unavailable {
+			annotationWidth = len(" (unavailable)")
+		}
+	}
+	nameWidth = min(nameWidth, max(1, width-1-2-2-statusWidth-2-10-annotationWidth))
+	lines := []string{"Search: " + query}
 	for i := start; i < start+visible; i++ {
 		c := matches[i]
 		prefix := "  "
 		if i == selected {
 			prefix = "> "
 		}
-		row := prefix + c.Name + "  " + c.Status
+		name := runewidth.Truncate(c.Name, nameWidth, "…")
+		row := fmt.Sprintf("%s%-*s  %-*s  %s", prefix, nameWidth, name, statusWidth, c.Status, c.Date)
 		if c.unavailable {
 			row += " (unavailable)"
 		}
 		lines = append(lines, row)
 	}
-	lines = append(lines, "Type: search · Backspace: edit · Ctrl-U: clear · Ctrl-R: refresh", "Up/Down · Ctrl-P/Ctrl-N · Enter: enter · Esc/Ctrl-C: cancel", diagnostic)
+	if diagnostic != "" {
+		lines = append(lines, diagnostic)
+	}
 	for i, line := range lines {
 		// Clip by terminal columns before styling, so wide query characters
 		// cannot wrap and escape sequences cannot be partially truncated.
 		runes := []rune(runewidth.Truncate(line, max(0, width-1), ""))
 		var positions []int
-		if i >= 2 && i < 2+visible {
-			positions = matches[start+i-2].positions
+		if i >= 1 && i < 1+visible {
+			match := matches[start+i-1]
+			for _, position := range match.positions {
+				if position >= nameWidth || (len(match.Name) > nameWidth && position == nameWidth-1) {
+					break
+				}
+				positions = append(positions, position)
+			}
 		}
 		var styled strings.Builder
 		for column, char := range runes {
